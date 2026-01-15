@@ -796,7 +796,7 @@
       <img src="icons/icon.png" alt="SPARTA" class="header-icon">
       <h1>Python 코드카타</h1>
     </div>
-    <div class="header-stats" id="headerStats">0/441</div>
+    <div class="header-stats" id="headerStats">0/431</div>
   </div>
 
   <div class="container">
@@ -888,7 +888,7 @@
       <div class="complete-card">
         <div class="complete-icon">🎉</div>
         <div class="complete-title">모든 문제 완료!</div>
-        <div class="complete-desc">441개 문제를 모두 해결했습니다</div>
+        <div class="complete-desc">431개 문제를 모두 해결했습니다</div>
       </div>
     </div>
 
@@ -914,17 +914,17 @@
 
     <!-- 플랫폼 탭 -->
     <div class="tab-nav">
-      <button class="tab-btn active" data-tab="programmers">
+      <button class="tab-btn active" data-tab="beginner">
+        <span>기초·입문</span>
+        <span class="tab-count" id="beginnerTabCount">0/223</span>
+      </button>
+      <button class="tab-btn" data-tab="programmers">
         <span>프로그래머스</span>
-        <span class="tab-count" id="progTabCount">0/180</span>
+        <span class="tab-count" id="progTabCount">0/170</span>
       </button>
       <button class="tab-btn" data-tab="baekjoon">
         <span>백준</span>
         <span class="tab-count" id="baekTabCount">0/38</span>
-      </button>
-      <button class="tab-btn" data-tab="beginner">
-        <span>기초·입문</span>
-        <span class="tab-count" id="beginnerTabCount">0/223</span>
       </button>
       <button class="tab-btn" data-tab="settings">
         <span>설정</span>
@@ -932,18 +932,8 @@
       </button>
     </div>
 
-    <!-- 프로그래머스 탭 -->
-    <div class="tab-content active" id="tab-programmers">
-      <div id="progDifficultyList"></div>
-    </div>
-
-    <!-- 백준 탭 -->
-    <div class="tab-content" id="tab-baekjoon">
-      <div id="baekDifficultyList"></div>
-    </div>
-
     <!-- 기초·입문 탭 -->
-    <div class="tab-content" id="tab-beginner">
+    <div class="tab-content active" id="tab-beginner">
       <!-- 코딩테스트 입문 섹션 -->
       <div class="difficulty-group">
         <div class="difficulty-header" data-category="intro">
@@ -978,6 +968,16 @@
         </div>
         <div class="problem-list" id="trainingProblems"></div>
       </div>
+    </div>
+
+    <!-- 프로그래머스 탭 -->
+    <div class="tab-content" id="tab-programmers">
+      <div id="progDifficultyList"></div>
+    </div>
+
+    <!-- 백준 탭 -->
+    <div class="tab-content" id="tab-baekjoon">
+      <div id="baekDifficultyList"></div>
     </div>
 
     <!-- 설정 탭 -->

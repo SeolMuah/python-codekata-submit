@@ -79,13 +79,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 플랫폼별 문제 수
   const PLATFORM_COUNTS = {
-    programmers: 180,
+    programmers: 170,  // L1~L7 (중복 10개 제거됨)
     baekjoon: 38,
     beginner: 223  // 기초·입문 (코딩테스트 입문 100 + 코딩 기초 트레이닝 123)
   };
 
   // 총 문제 수
-  const TOTAL_PROBLEMS = 441;
+  const TOTAL_PROBLEMS = 431;
 
   // 플랫폼 이름
   const PLATFORM_NAMES = {
