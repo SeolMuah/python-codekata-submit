@@ -342,20 +342,21 @@ async function handlePushDynamicProblem(data) {
     // GitHub API 인스턴스 생성 (OAuth 토큰 사용)
     const api = createGitHubAPI(githubToken, githubRepo);
 
-    // 플랫폼별 폴더 경로 설정
-    const platformFolder = platform === 'programmers' ? '프로그래머스' : '백준';
+    // 플랫폼별 폴더 경로 설정 (영문 폴더명 사용)
+    const platformFolder = platform === 'programmers' ? 'programmers' : 'baekjoon';
+    const platformLabel = platform === 'programmers' ? '프로그래머스' : '백준';
 
     // 파일명 생성 (특수문자 제거)
     const safeTitle = title.replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, '_').substring(0, 50);
     const fileName = `${problemId}_${safeTitle}.py`;
 
-    // 경로: 프로그래머스/other/문제.py 또는 백준/other/문제.py
+    // 경로: programmers/other/문제.py 또는 baekjoon/other/문제.py
     const filePath = `${platformFolder}/other/${fileName}`;
 
     // 커밋 메시지 생성
     const now = new Date();
     const dateStr = now.toLocaleDateString('ko-KR');
-    const commitMessage = `[${platformFolder}] ${title} 풀이 제출\n\n- 문제 ID: ${problemId}\n- 난이도: ${difficulty || 'unknown'}\n- 제출일: ${dateStr}\n- 작성자: ${studentName || '학생'}`;
+    const commitMessage = `[${platformLabel}] ${title} 풀이 제출\n\n- 문제 ID: ${problemId}\n- 난이도: ${difficulty || 'unknown'}\n- 제출일: ${dateStr}\n- 작성자: ${studentName || '학생'}`;
 
     // 코드에 헤더 추가
     const codeWithHeader = `# ${title}\n# 문제 ID: ${problemId}\n# 플랫폼: ${platform}\n# 난이도: ${difficulty || 'unknown'}\n# 제출일: ${dateStr}\n\n${code}`;

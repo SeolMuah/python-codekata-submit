@@ -66,7 +66,7 @@ python_submit_chrome/
 
 ```
 your-repo/
-├── 프로그래머스/
+├── programmers/
 │   ├── L0_기초입문/
 │   │   ├── 입문/
 │   │   └── 기초트레이닝/
@@ -77,7 +77,7 @@ your-repo/
 │   ├── L5_고급/
 │   ├── L7_챌린지/
 │   └── other/              # 미등록 문제
-└── 백준/
+└── baekjoon/
     ├── L8_백준/
     └── other/              # 미등록 문제
 ```
@@ -102,7 +102,7 @@ your-repo/
 ### 미등록 문제 지원
 
 - `problems.js`에 등록되지 않은 문제도 자동으로 업로드됩니다
-- 미등록 문제는 `프로그래머스/other/` 또는 `백준/other/` 폴더에 저장됩니다
+- 미등록 문제는 `programmers/other/` 또는 `baekjoon/other/` 폴더에 저장됩니다
 - 문제 제목과 ID가 페이지에서 자동 추출됩니다
 
 ## 기술 스택
