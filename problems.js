@@ -477,6 +477,11 @@ function getProblemUrl(problem) {
   }
 }
 
+// problemId와 platform으로 문제 정보 찾기
+function getProblemByProblemId(problemId, platform) {
+  return PROBLEMS.find(p => p.problemId === problemId && p.platform === platform);
+}
+
 // GitHub 저장 경로 생성
 function getGitHubPath(problem) {
   const diffInfo = DIFFICULTY_INFO[problem.difficulty];

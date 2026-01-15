@@ -283,13 +283,6 @@
     console.log('[SPARTA Python] 제출 감지:', { problemId, isCorrect, title: problemInfo.title });
 
     if (isCorrect === true) {
-      // 이미 제출된 문제인지 확인
-      if (await isAlreadySubmitted(problemInfo.id)) {
-        console.log('[SPARTA Python] 이미 제출 완료된 문제:', problemInfo.id);
-        showNotification('이미 제출된 문제입니다!', 'info');
-        return;
-      }
-
       const code = getCode();
       if (!code) {
         showNotification('코드를 가져올 수 없습니다', 'error');
