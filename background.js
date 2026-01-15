@@ -4,6 +4,11 @@
 // Service Worker에서 외부 스크립트 import
 importScripts('problems.js', 'github-api.js', 'oauth.js');
 
+// 전역 에러 핸들러 - Unhandled Promise Rejection 처리
+self.addEventListener('unhandledrejection', (event) => {
+  console.error('[Background] Unhandled Promise Rejection:', event.reason);
+});
+
 // 메시지 리스너
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('[Background] 메시지 수신:', message.type);
@@ -77,6 +82,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // 기존 메시지
     case 'PUSH_TO_GITHUB':
       handlePushToGitHub(message.data)
+        .then(result => sendResponse(result))
+        .catch(error => sendResponse({ success: false, message: error.message }));
+      return true;
+
+    // 동적 문제 (미등록 문제) 푸시
+    case 'PUSH_DYNAMIC_PROBLEM':
+      handlePushDynamicProblem(message.data)
         .then(result => sendResponse(result))
         .catch(error => sendResponse({ success: false, message: error.message }));
       return true;
@@ -281,14 +293,83 @@ async function handlePushToGitHub(data) {
     // 코드 업로드
     const result = await api.pushSolution(problem, code, studentName || '학생');
 
-    // 성공 시 진행률 업데이트
+    // 성공 시 진행률 업데이트 (재시도 로직 포함)
     if (result.success) {
-      await updateProgress(problem.id);
+      try {
+        await updateProgress(problem.id);
+        console.log(`[Background] 진행률 저장 완료: ${problem.id}`);
+      } catch (progressError) {
+        console.error('[Background] 진행률 저장 실패, 재시도:', progressError);
+        // 1회 재시도
+        try {
+          await new Promise(r => setTimeout(r, 500));
+          await updateProgress(problem.id);
+          console.log(`[Background] 진행률 저장 재시도 성공: ${problem.id}`);
+        } catch (retryError) {
+          console.error('[Background] 진행률 저장 재시도 실패:', retryError);
+          return {
+            ...result,
+            warning: '코드는 업로드되었으나 진행률 저장에 실패했습니다. 새로고침 후 확인해주세요.'
+          };
+        }
+      }
     }
 
     return result;
   } catch (error) {
     console.error('[Background] GitHub Push 오류:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+// 동적 문제 (미등록 문제) GitHub Push 처리
+async function handlePushDynamicProblem(data) {
+  const { problemId, title, platform, difficulty, code } = data;
+
+  // OAuth 토큰 및 설정 불러오기
+  const { githubToken } = await chrome.storage.local.get(['githubToken']);
+  const { githubRepo, studentName } = await chrome.storage.sync.get(['githubRepo', 'studentName']);
+
+  if (!githubToken) {
+    return { success: false, message: 'GitHub 로그인이 필요합니다' };
+  }
+
+  if (!githubRepo) {
+    return { success: false, message: '저장소를 선택해주세요' };
+  }
+
+  try {
+    // GitHub API 인스턴스 생성 (OAuth 토큰 사용)
+    const api = createGitHubAPI(githubToken, githubRepo);
+
+    // 플랫폼별 폴더 경로 설정
+    const platformFolder = platform === 'programmers' ? '프로그래머스' : '백준';
+
+    // 파일명 생성 (특수문자 제거)
+    const safeTitle = title.replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, '_').substring(0, 50);
+    const fileName = `${problemId}_${safeTitle}.py`;
+
+    // 경로: 프로그래머스/other/문제.py 또는 백준/other/문제.py
+    const filePath = `${platformFolder}/other/${fileName}`;
+
+    // 커밋 메시지 생성
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('ko-KR');
+    const commitMessage = `[${platformFolder}] ${title} 풀이 제출\n\n- 문제 ID: ${problemId}\n- 난이도: ${difficulty || 'unknown'}\n- 제출일: ${dateStr}\n- 작성자: ${studentName || '학생'}`;
+
+    // 코드에 헤더 추가
+    const codeWithHeader = `# ${title}\n# 문제 ID: ${problemId}\n# 플랫폼: ${platform}\n# 난이도: ${difficulty || 'unknown'}\n# 제출일: ${dateStr}\n\n${code}`;
+
+    // GitHub에 푸시
+    const result = await api.pushFile(filePath, codeWithHeader, commitMessage);
+
+    if (result.success) {
+      console.log(`[Background] 동적 문제 업로드 성공: ${filePath}`);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('[Background] 동적 문제 GitHub Push 오류:', error);
     return { success: false, message: error.message };
   }
 }
@@ -321,7 +402,7 @@ async function handleSaveSettings(data) {
   }
 }
 
-// 진행률 업데이트
+// 진행률 업데이트 (쓰기 검증 및 브로드캐스트 포함)
 async function updateProgress(problemId) {
   const syncData = await chrome.storage.sync.get(['progress']);
   const progress = syncData.progress || {};
@@ -332,7 +413,22 @@ async function updateProgress(problemId) {
   };
 
   await chrome.storage.sync.set({ progress });
-  console.log(`[Background] 진행률 업데이트: 문제 #${problemId} 완료`);
+
+  // 쓰기 검증
+  const verification = await chrome.storage.sync.get(['progress']);
+  if (!verification.progress?.[problemId]?.completed) {
+    throw new Error(`진행률 저장 검증 실패: ${problemId}`);
+  }
+
+  console.log(`[Background] 진행률 업데이트 및 검증 완료: 문제 #${problemId}`);
+
+  // 팝업에 진행률 업데이트 알림 브로드캐스트
+  chrome.runtime.sendMessage({
+    type: 'PROGRESS_UPDATED',
+    problemId: problemId
+  }).catch(() => {
+    // 팝업이 닫혀있으면 무시 - 정상 동작
+  });
 }
 
 // 진행률 토글 (팝업에서 사용)

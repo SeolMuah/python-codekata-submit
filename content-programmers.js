@@ -15,6 +15,70 @@
     return match ? match[1] : null;
   }
 
+  // 페이지에서 동적으로 문제 정보 추출 (미등록 문제용)
+  function extractProblemInfoFromPage(problemId) {
+    // 문제 제목 추출
+    let title = null;
+
+    // 프로그래머스 문제 제목 선택자들
+    const titleSelectors = [
+      '.challenge-title',
+      '.problem-title',
+      'h2.challenge-title',
+      '[class*="Title"]',
+      '.lesson-content h2',
+      '.algorithm-title'
+    ];
+
+    for (const selector of titleSelectors) {
+      const el = document.querySelector(selector);
+      if (el && el.textContent.trim()) {
+        title = el.textContent.trim();
+        break;
+      }
+    }
+
+    // 제목을 찾지 못한 경우 페이지 타이틀에서 추출
+    if (!title) {
+      const pageTitle = document.title;
+      // "문제이름 | 프로그래머스" 형식에서 추출
+      const match = pageTitle.match(/^(.+?)\s*[|\-]/);
+      if (match) {
+        title = match[1].trim();
+      }
+    }
+
+    // 그래도 없으면 기본값
+    if (!title) {
+      title = `프로그래머스 문제 ${problemId}`;
+    }
+
+    // 난이도 추출 시도
+    let difficulty = 'unknown';
+    const levelEl = document.querySelector('.challenge-level') ||
+                    document.querySelector('[class*="level"]') ||
+                    document.querySelector('.difficulty');
+    if (levelEl) {
+      const levelText = levelEl.textContent.toLowerCase();
+      if (levelText.includes('1') || levelText.includes('lv1')) difficulty = 'lv1';
+      else if (levelText.includes('2') || levelText.includes('lv2')) difficulty = 'lv2';
+      else if (levelText.includes('3') || levelText.includes('lv3')) difficulty = 'lv3';
+      else if (levelText.includes('4') || levelText.includes('lv4')) difficulty = 'lv4';
+      else if (levelText.includes('5') || levelText.includes('lv5')) difficulty = 'lv5';
+    }
+
+    console.log('[SPARTA Python] 동적 문제 정보 추출:', { problemId, title, difficulty });
+
+    return {
+      id: `programmers-dynamic-${problemId}`,
+      problemId: problemId,
+      title: title,
+      platform: 'programmers',
+      difficulty: difficulty,
+      isDynamic: true  // 동적으로 추출된 문제임을 표시
+    };
+  }
+
   // 코드 추출
   function getCode() {
     // Monaco Editor (프로그래머스에서 주로 사용)
@@ -260,15 +324,18 @@
       return;
     }
 
-    // problems.js에서 문제 정보 찾기
-    const problemInfo = getProblemByProblemId(problemId, 'programmers');
+    // problems.js에서 문제 정보 찾기 (등록된 문제)
+    let problemInfo = getProblemByProblemId(problemId, 'programmers');
+    let isDynamicProblem = false;
+
+    // 미등록 문제인 경우 페이지에서 동적으로 정보 추출
     if (!problemInfo) {
-      console.log('[SPARTA Python] 등록되지 않은 문제:', problemId);
-      showNotification('등록되지 않은 문제입니다', 'warning');
-      return;
+      console.log('[SPARTA Python] 미등록 문제, 동적 정보 추출:', problemId);
+      problemInfo = extractProblemInfoFromPage(problemId);
+      isDynamicProblem = true;
     }
 
-    console.log('[SPARTA Python] 제출 감지:', { problemId, isCorrect, title: problemInfo.title });
+    console.log('[SPARTA Python] 제출 감지:', { problemId, isCorrect, title: problemInfo.title, isDynamic: isDynamicProblem });
 
     if (isCorrect === true) {
       const code = getCode();
@@ -286,9 +353,51 @@
       }
 
       showNotification('정답입니다! GitHub에 업로드 중...', 'success');
-      await pushToGitHub(problemInfo, code);
+
+      // 동적 문제는 PUSH_DYNAMIC_PROBLEM 메시지 사용
+      if (isDynamicProblem) {
+        await pushDynamicToGitHub(problemInfo, code);
+      } else {
+        await pushToGitHub(problemInfo, code);
+      }
     } else if (isCorrect === false) {
       showNotification('오답입니다. 다시 시도해보세요!', 'error');
+    }
+  }
+
+  // 동적 문제 GitHub 푸시 (미등록 문제용)
+  async function pushDynamicToGitHub(problemInfo, code) {
+    try {
+      console.log('[SPARTA Python] 동적 문제 GitHub Push 시작:', problemInfo.title);
+
+      const response = await chrome.runtime.sendMessage({
+        type: 'PUSH_DYNAMIC_PROBLEM',
+        data: {
+          problemId: problemInfo.problemId,
+          title: problemInfo.title,
+          platform: 'programmers',
+          difficulty: problemInfo.difficulty,
+          code: code
+        }
+      });
+
+      if (response && response.success) {
+        console.log('[SPARTA Python] 동적 문제 GitHub Push 성공!');
+        showNotification('GitHub에 업로드되었습니다! (기타문제)', 'success');
+        return true;
+      } else {
+        console.error('[SPARTA Python] 동적 문제 GitHub Push 실패:', response?.message);
+        showNotification('GitHub 업로드 실패: ' + (response?.message || '알 수 없는 오류'), 'error');
+        return false;
+      }
+    } catch (error) {
+      console.error('[SPARTA Python] 동적 문제 GitHub Push 오류:', error);
+      if (error.message && error.message.includes('Extension context invalidated')) {
+        showNotification('익스텐션이 업데이트되었습니다. 페이지를 새로고침해주세요!', 'error');
+      } else {
+        showNotification('GitHub 업로드 오류: ' + error.message, 'error');
+      }
+      return false;
     }
   }
 

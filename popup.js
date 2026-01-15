@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Storage 변경 감지 리스너 - 토큰 변경 시 즉시 UI 업데이트
+  // Storage 변경 감지 리스너 - 토큰/진행률 변경 시 즉시 UI 업데이트
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local') {
       // 토큰이 추가됨 (로그인 성공)
@@ -110,6 +110,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         nextProblemContainer.classList.add('hidden');
       }
     }
+    // 진행률 변경 감지 (sync storage)
+    if (areaName === 'sync' && changes.progress) {
+      console.log('[SPARTA Python] 진행률 변경 감지됨');
+      const updatedProgress = changes.progress.newValue || {};
+      progress = updatedProgress;
+      updateProgress(progress);
+      showNextProblem(progress);
+      renderAllPlatforms(progress);  // 전체 UI 즉시 업데이트
+    }
   });
 
   // Background에서 브로드캐스트 수신 - 즉시 UI 업데이트
@@ -117,6 +126,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (message.type === 'AUTH_SUCCESS') {
       console.log('[SPARTA Python] AUTH_SUCCESS 브로드캐스트 수신');
       checkAndUpdateAuthState();
+    }
+    // 진행률 업데이트 브로드캐스트 수신
+    if (message.type === 'PROGRESS_UPDATED') {
+      console.log('[SPARTA Python] PROGRESS_UPDATED 브로드캐스트 수신:', message.problemId);
+      chrome.storage.sync.get(['progress']).then(({ progress: updatedProgress }) => {
+        progress = updatedProgress || {};
+        updateProgress(progress);
+        showNextProblem(progress);
+        renderAllPlatforms(progress);
+      });
     }
   });
 
@@ -400,16 +419,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 15 * 60 * 1000);
   }
 
-  // 로그아웃 처리
+  // 로그아웃 처리 (완전한 상태 초기화)
   async function handleLogout() {
     try {
-      await chrome.runtime.sendMessage({ type: 'LOGOUT' });
-      showLoggedOutState();
-      nextProblemContainer.classList.add('hidden');
-      showToast('로그아웃되었습니다');
+      // 진행 중인 인증 폴링 중지
+      if (authWatchInterval) {
+        clearInterval(authWatchInterval);
+        authWatchInterval = null;
+      }
+
+      const result = await chrome.runtime.sendMessage({ type: 'LOGOUT' });
+
+      if (result.success) {
+        // UI 상태 완전 초기화
+        showLoggedOutState();
+        resetLoginUI();  // 로그인 UI도 초기 상태로
+        nextProblemContainer.classList.add('hidden');
+
+        // 저장소 선택 상태 초기화
+        repoSelect.innerHTML = '<option value="">저장소를 선택하세요...</option>';
+        settingsRepoSelect.innerHTML = '<option value="">저장소를 선택하세요...</option>';
+
+        showToast('로그아웃되었습니다');
+      } else {
+        showToast('로그아웃 실패: ' + (result.message || '알 수 없는 오류'), 'error');
+      }
     } catch (error) {
       console.error('[SPARTA Python] 로그아웃 오류:', error);
-      showToast('로그아웃 실패: ' + error.message);
+      showToast('로그아웃 실패: ' + error.message, 'error');
     }
   }
 
@@ -910,24 +947,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 토스트 메시지
-  function showToast(message) {
+  // 토스트 메시지 (타입별 스타일 지원)
+  function showToast(message, type = 'success', duration = 2500) {
     const toast = document.createElement('div');
     toast.textContent = message;
+
+    // 타입별 배경색
+    let bgColor = 'rgba(0,0,0,0.8)';
+    if (type === 'error') bgColor = '#dc3545';
+    else if (type === 'warning') bgColor = '#ffc107';
+
+    // 타입별 글자색
+    let textColor = 'white';
+    if (type === 'warning') textColor = '#000';
+
     toast.style.cssText = `
       position: fixed;
       bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0,0,0,0.8);
-      color: white;
+      background: ${bgColor};
+      color: ${textColor};
       padding: 10px 20px;
       border-radius: 8px;
       font-size: 12px;
       z-index: 1000;
       animation: fadeIn 0.2s;
+      max-width: 280px;
+      text-align: center;
+      word-break: keep-all;
     `;
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 2000);
+    setTimeout(() => toast.remove(), duration);
   }
 });

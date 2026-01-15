@@ -29,6 +29,69 @@
     return urlParams.get('problem_id');
   }
 
+  // 페이지에서 동적으로 문제 정보 추출 (미등록 문제용)
+  function extractProblemInfoFromPage(problemId) {
+    // 문제 제목 추출
+    let title = null;
+
+    // 백준 문제 제목 선택자들
+    const titleSelectors = [
+      '#problem_title',
+      '.problem-label',
+      'h1 span#problem_title',
+      '.headline span'
+    ];
+
+    for (const selector of titleSelectors) {
+      const el = document.querySelector(selector);
+      if (el && el.textContent.trim()) {
+        title = el.textContent.trim();
+        break;
+      }
+    }
+
+    // 제목을 찾지 못한 경우 페이지 타이틀에서 추출
+    if (!title) {
+      const pageTitle = document.title;
+      // "문제번호번: 문제이름" 형식에서 추출
+      const match = pageTitle.match(/^\d+번:\s*(.+)/);
+      if (match) {
+        title = match[1].trim();
+      }
+    }
+
+    // 그래도 없으면 기본값
+    if (!title) {
+      title = `백준 문제 ${problemId}`;
+    }
+
+    // 난이도 추출 시도 (solved.ac 티어)
+    let difficulty = 'unknown';
+    const tierEl = document.querySelector('.solvedac-tier img') ||
+                   document.querySelector('[class*="tier"]');
+    if (tierEl) {
+      const tierAlt = tierEl.getAttribute('alt') || tierEl.textContent || '';
+      const tierLower = tierAlt.toLowerCase();
+      if (tierLower.includes('bronze')) difficulty = 'bronze';
+      else if (tierLower.includes('silver')) difficulty = 'silver';
+      else if (tierLower.includes('gold')) difficulty = 'gold';
+      else if (tierLower.includes('platinum')) difficulty = 'platinum';
+      else if (tierLower.includes('diamond')) difficulty = 'diamond';
+      else if (tierLower.includes('ruby')) difficulty = 'ruby';
+    }
+
+    console.log('[SPARTA Python] 동적 문제 정보 추출:', { problemId, title, difficulty });
+
+    return {
+      id: `baekjoon-dynamic-${problemId}`,
+      problemId: problemId,
+      title: title,
+      platform: 'baekjoon',
+      difficulty: difficulty,
+      isDynamic: true  // 동적으로 추출된 문제임을 표시
+    };
+  }
+
   // 코드 추출 (submit 페이지에서)
   function getCode() {
     // CodeMirror (백준 기본 에디터)
@@ -104,14 +167,15 @@
   }
 
   // 제출 코드 임시 저장 (submit 페이지에서)
-  async function savePendingSubmission(problemId, code) {
+  async function savePendingSubmission(problemId, code, dynamicInfo = null) {
     const data = {
       problemId: problemId,
       code: code,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      dynamicInfo: dynamicInfo  // 미등록 문제의 경우 동적 정보 포함
     };
     await chrome.storage.local.set({ [STORAGE_KEY]: data });
-    console.log('[SPARTA Python] 제출 코드 임시 저장:', problemId);
+    console.log('[SPARTA Python] 제출 코드 임시 저장:', problemId, dynamicInfo ? '(동적)' : '');
   }
 
   // 저장된 제출 정보 가져오기
@@ -156,6 +220,38 @@
     }
   }
 
+  // 동적 문제 GitHub 푸시 (미등록 문제용)
+  async function pushDynamicToGitHub(problemInfo, code) {
+    try {
+      console.log('[SPARTA Python] 동적 문제 GitHub Push 시작:', problemInfo.title);
+
+      const response = await chrome.runtime.sendMessage({
+        type: 'PUSH_DYNAMIC_PROBLEM',
+        data: {
+          problemId: problemInfo.problemId,
+          title: problemInfo.title,
+          platform: 'baekjoon',
+          difficulty: problemInfo.difficulty,
+          code: code
+        }
+      });
+
+      if (response && response.success) {
+        console.log('[SPARTA Python] 동적 문제 GitHub Push 성공!');
+        showNotification('GitHub에 업로드되었습니다! (other)', 'success');
+        return true;
+      } else {
+        console.error('[SPARTA Python] 동적 문제 GitHub Push 실패:', response?.message);
+        showNotification('GitHub 업로드 실패: ' + (response?.message || '알 수 없는 오류'), 'error');
+        return false;
+      }
+    } catch (error) {
+      console.error('[SPARTA Python] 동적 문제 GitHub Push 오류:', error);
+      showNotification('GitHub 업로드 오류: ' + error.message, 'error');
+      return false;
+    }
+  }
+
   // 이미 제출된 문제인지 확인
   async function isAlreadySubmitted(problemId) {
     try {
@@ -195,20 +291,24 @@
       return;
     }
 
-    // 문제 정보 확인
-    const problemInfo = getProblemByProblemId(problemId, 'baekjoon');
+    // 문제 정보 확인 (등록된 문제)
+    let problemInfo = getProblemByProblemId(problemId, 'baekjoon');
+    let dynamicInfo = null;
+
+    // 미등록 문제인 경우 동적으로 정보 추출
     if (!problemInfo) {
-      console.log('[SPARTA Python] 등록되지 않은 백준 문제:', problemId);
-      return;
+      console.log('[SPARTA Python] 미등록 백준 문제, 동적 정보 추출:', problemId);
+      dynamicInfo = extractProblemInfoFromPage(problemId);
+      console.log('[SPARTA Python] 동적 문제 감지:', dynamicInfo.title);
+    } else {
+      console.log('[SPARTA Python] 백준 문제 감지:', problemInfo.title);
     }
 
-    console.log('[SPARTA Python] 백준 문제 감지:', problemInfo.title);
-
-    // 제출 버튼 감시
-    observeSubmitButton(problemId);
+    // 제출 버튼 감시 (동적 정보도 전달)
+    observeSubmitButton(problemId, dynamicInfo);
   }
 
-  function observeSubmitButton(problemId) {
+  function observeSubmitButton(problemId, dynamicInfo = null) {
     const submitBtn = document.querySelector('#submit_button') ||
                       document.querySelector('button[type="submit"]') ||
                       document.querySelector('input[type="submit"]');
@@ -222,7 +322,7 @@
 
         const code = getCode();
         if (code) {
-          await savePendingSubmission(problemId, code);
+          await savePendingSubmission(problemId, code, dynamicInfo);
         }
       });
 
@@ -235,7 +335,7 @@
 
           const code = getCode();
           if (code) {
-            await savePendingSubmission(problemId, code);
+            await savePendingSubmission(problemId, code, dynamicInfo);
           }
         });
       }
@@ -261,28 +361,36 @@
     }
 
     const problemId = pending.problemId;
-    const problemInfo = getProblemByProblemId(problemId, 'baekjoon');
+    let problemInfo = getProblemByProblemId(problemId, 'baekjoon');
+    let isDynamicProblem = false;
 
+    // 미등록 문제인 경우 저장된 동적 정보 사용
     if (!problemInfo) {
-      console.log('[SPARTA Python] 등록되지 않은 문제');
-      await clearPendingSubmission();
-      return;
+      if (pending.dynamicInfo) {
+        console.log('[SPARTA Python] 동적 문제 정보 사용:', pending.dynamicInfo.title);
+        problemInfo = pending.dynamicInfo;
+        isDynamicProblem = true;
+      } else {
+        console.log('[SPARTA Python] 등록되지 않은 문제 (동적 정보 없음)');
+        await clearPendingSubmission();
+        return;
+      }
     }
 
-    // 이미 제출된 문제인지 확인
-    if (await isAlreadySubmitted(problemInfo.id)) {
+    // 이미 제출된 문제인지 확인 (등록된 문제만)
+    if (!isDynamicProblem && await isAlreadySubmitted(problemInfo.id)) {
       console.log('[SPARTA Python] 이미 제출 완료된 문제');
       await clearPendingSubmission();
       return;
     }
 
-    console.log('[SPARTA Python] 결과 대기 중:', problemInfo.title);
+    console.log('[SPARTA Python] 결과 대기 중:', problemInfo.title, isDynamicProblem ? '(동적)' : '');
 
     // 결과 폴링 시작
-    pollForResult(problemInfo, pending.code);
+    pollForResult(problemInfo, pending.code, isDynamicProblem);
   }
 
-  function pollForResult(problemInfo, code) {
+  function pollForResult(problemInfo, code, isDynamicProblem = false) {
     let attempts = 0;
     const maxAttempts = 60; // 60초 타임아웃
 
@@ -305,7 +413,13 @@
         }
 
         showNotification('정답입니다! GitHub에 업로드 중...', 'success');
-        await pushToGitHub(problemInfo, code);
+
+        // 동적 문제는 PUSH_DYNAMIC_PROBLEM 메시지 사용
+        if (isDynamicProblem) {
+          await pushDynamicToGitHub(problemInfo, code);
+        } else {
+          await pushToGitHub(problemInfo, code);
+        }
         await clearPendingSubmission();
         return;
       } else if (result === 'rejected') {

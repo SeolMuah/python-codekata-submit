@@ -15,9 +15,30 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// 유틸리티: 타임아웃이 있는 fetch 래퍼
+async function fetchWithTimeout(url, options = {}, timeout = 30000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    return response;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('요청 시간이 초과되었습니다. 네트워크 연결을 확인해주세요.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // 1. Device Code 요청
 async function requestDeviceCode() {
-  const response = await fetch(GITHUB_DEVICE_CODE_URL, {
+  const response = await fetchWithTimeout(GITHUB_DEVICE_CODE_URL, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',
@@ -27,7 +48,7 @@ async function requestDeviceCode() {
       client_id: GITHUB_CLIENT_ID,
       scope: 'repo user'
     })
-  });
+  }, 15000);  // 15초 타임아웃
 
   if (!response.ok) {
     throw new Error('Device Code 요청 실패');
@@ -125,13 +146,13 @@ async function pollForToken(deviceCode, interval = 5, expiresIn = 900) {
 
 // 3. 사용자 정보 가져오기
 async function getUserInfo(token) {
-  const response = await fetch(GITHUB_USER_URL, {
+  const response = await fetchWithTimeout(GITHUB_USER_URL, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28'
     }
-  });
+  }, 15000);  // 15초 타임아웃
 
   if (!response.ok) {
     throw new Error('사용자 정보 조회 실패');
@@ -150,7 +171,7 @@ async function getUserInfo(token) {
 async function getUserRepos(token) {
   // 캐시 무효화를 위한 타임스탬프 추가
   const timestamp = Date.now();
-  const response = await fetch(`${GITHUB_REPOS_URL}?per_page=100&sort=updated&_t=${timestamp}`, {
+  const response = await fetchWithTimeout(`${GITHUB_REPOS_URL}?per_page=100&sort=updated&_t=${timestamp}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/vnd.github+json',
@@ -158,7 +179,7 @@ async function getUserRepos(token) {
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache'
     }
-  });
+  }, 20000);  // 20초 타임아웃 (목록이 많을 수 있음)
 
   if (!response.ok) {
     throw new Error('저장소 목록 조회 실패');
@@ -176,7 +197,7 @@ async function getUserRepos(token) {
 
 // 5. 새 저장소 생성
 async function createRepo(token, repoName = 'python-codekata') {
-  const response = await fetch(GITHUB_REPOS_URL, {
+  const response = await fetchWithTimeout(GITHUB_REPOS_URL, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -193,7 +214,7 @@ async function createRepo(token, repoName = 'python-codekata') {
       has_projects: false,
       has_wiki: false
     })
-  });
+  }, 20000);  // 20초 타임아웃
 
   if (!response.ok) {
     const error = await response.json();
@@ -214,12 +235,12 @@ async function createRepo(token, repoName = 'python-codekata') {
 // 6. 토큰 유효성 검사
 async function validateToken(token) {
   try {
-    const response = await fetch(GITHUB_USER_URL, {
+    const response = await fetchWithTimeout(GITHUB_USER_URL, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github+json'
       }
-    });
+    }, 10000);  // 10초 타임아웃
     return response.ok;
   } catch {
     return false;

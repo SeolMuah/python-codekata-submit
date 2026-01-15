@@ -126,6 +126,11 @@ class GitHubAPI {
     }
   }
 
+  // 단순 파일 푸시 (동적 문제용)
+  async pushFile(path, content, message) {
+    return await this.createOrUpdateFile(path, content, message);
+  }
+
   // 코드카타 문제 풀이 코드 업로드
   async pushSolution(problem, code, studentName) {
     const path = getGitHubPath(problem);
