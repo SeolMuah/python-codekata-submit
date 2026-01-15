@@ -245,18 +245,6 @@
     }
   }
 
-  // 이미 제출된 문제인지 확인
-  async function isAlreadySubmitted(problemId) {
-    try {
-      const stored = await chrome.storage.sync.get(['progress']);
-      const progress = stored.progress || {};
-      return progress[problemId]?.completed === true;
-    } catch (error) {
-      console.error('[SPARTA Python] 진행률 조회 오류:', error);
-      return false;
-    }
-  }
-
   // 제출 처리 (한 번만 실행)
   async function handleSubmission(isCorrect) {
     if (hasProcessedResult) {
