@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "SPARTA Python 코드카타",
+  "version": "1.0.0",
+  "description": "Python 코드카타 자동 제출 (GitHub OAuth) - 218문제",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://school.programmers.co.kr/*",
+    "https://www.acmicpc.net/*",
+    "https://api.github.com/*",
+    "https://github.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icons/icon.png"
+  },
+  "icons": {
+    "128": "icons/icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://school.programmers.co.kr/learn/courses/*/lessons/*"],
+      "js": ["problems.js", "content-programmers.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.acmicpc.net/problem/*",
+        "https://www.acmicpc.net/submit/*",
+        "https://www.acmicpc.net/status*"
+      ],
+      "js": ["problems.js", "content-baekjoon.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
