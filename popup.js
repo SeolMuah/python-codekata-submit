@@ -69,6 +69,57 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 인증 상태 감시 인터벌 (최상단에 선언해야 temporal dead zone 회피)
   let authWatchInterval = null;
 
+  // ========== 인증 상태 자동 업데이트 리스너 ==========
+
+  // 인증 상태 확인 및 UI 업데이트 함수 (재사용)
+  async function checkAndUpdateAuthState() {
+    try {
+      const authResult = await chrome.runtime.sendMessage({ type: 'CHECK_AUTH' });
+      console.log('[SPARTA Python] 인증 상태 업데이트:', authResult);
+
+      if (authResult.success && authResult.authenticated && authResult.user) {
+        showLoggedInState(authResult.user, authResult.repo);
+        nextProblemContainer.classList.remove('hidden');
+        await loadUserRepos();
+
+        // progress 데이터 로드 및 UI 업데이트
+        const { progress = {} } = await chrome.storage.sync.get(['progress']);
+        updateProgress(progress);
+        showNextProblem(progress);
+
+        showToast('GitHub 로그인 성공!');
+        resetLoginUI();
+      }
+    } catch (error) {
+      console.error('[SPARTA Python] 인증 상태 업데이트 오류:', error);
+    }
+  }
+
+  // Storage 변경 감지 리스너 - 토큰 변경 시 즉시 UI 업데이트
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local') {
+      // 토큰이 추가됨 (로그인 성공)
+      if (changes.githubToken?.newValue && !changes.githubToken?.oldValue) {
+        console.log('[SPARTA Python] 토큰 감지됨 - UI 업데이트');
+        checkAndUpdateAuthState();
+      }
+      // 토큰이 삭제됨 (로그아웃)
+      if (!changes.githubToken?.newValue && changes.githubToken?.oldValue) {
+        console.log('[SPARTA Python] 토큰 삭제됨 - 로그아웃 상태로 전환');
+        showLoggedOutState();
+        nextProblemContainer.classList.add('hidden');
+      }
+    }
+  });
+
+  // Background에서 브로드캐스트 수신 - 즉시 UI 업데이트
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'AUTH_SUCCESS') {
+      console.log('[SPARTA Python] AUTH_SUCCESS 브로드캐스트 수신');
+      checkAndUpdateAuthState();
+    }
+  });
+
   // 저장된 진행률 및 설정 로드
   const syncData = await chrome.storage.sync.get(['progress', 'studentName', 'githubRepo', 'autoSubmitEnabled']);
   let progress = syncData.progress || {};
@@ -100,16 +151,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     showNameSetup();
   }
 
-  // 인증 상태 확인
-  const authResult = await chrome.runtime.sendMessage({ type: 'CHECK_AUTH' });
-  console.log('[SPARTA Python] 인증 상태:', authResult);
+  // 인증 상태 확인 (강화된 검증)
+  try {
+    const authResult = await chrome.runtime.sendMessage({ type: 'CHECK_AUTH' });
+    console.log('[SPARTA Python] 인증 상태:', authResult);
 
-  if (authResult.success && authResult.authenticated) {
-    // 로그인됨
-    showLoggedInState(authResult.user, authResult.repo);
-    nextProblemContainer.classList.remove('hidden');
-  } else {
-    // 로그인 안됨
+    // user 객체까지 확인하여 완전한 로그인 상태 검증
+    if (authResult.success && authResult.authenticated && authResult.user) {
+      // 로그인됨
+      showLoggedInState(authResult.user, authResult.repo);
+      nextProblemContainer.classList.remove('hidden');
+      // 저장소 목록도 로드
+      await loadUserRepos();
+    } else {
+      // 로그인 안됨
+      showLoggedOutState();
+      nextProblemContainer.classList.add('hidden');
+    }
+  } catch (error) {
+    console.error('[SPARTA Python] 초기 인증 상태 확인 실패:', error);
     showLoggedOutState();
     nextProblemContainer.classList.add('hidden');
   }
@@ -490,6 +550,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 로그인 상태 UI 표시
   function showLoggedInState(user, repo) {
+    // 방어 코드: user 정보가 없으면 리턴
+    if (!user || !user.login) {
+      console.warn('[SPARTA Python] showLoggedInState: user 정보 없음, 건너뜀');
+      return;
+    }
+
     // 메인 UI
     loginSection.classList.add('hidden');
     userSection.classList.remove('hidden');

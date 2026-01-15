@@ -123,12 +123,19 @@ async function handlePollForToken(data) {
   const result = await pollForToken(device_code, interval, expires_in);
 
   if (result.success) {
-    // 토큰 저장
-    await chrome.storage.local.set({ githubToken: result.access_token });
-
-    // 사용자 정보 가져와서 저장
+    // 사용자 정보 먼저 가져오기 (race condition 방지)
     const userInfo = await getUserInfo(result.access_token);
-    await chrome.storage.local.set({ githubUser: userInfo });
+
+    // 토큰과 사용자 정보 함께 저장 (원자적 업데이트)
+    await chrome.storage.local.set({
+      githubToken: result.access_token,
+      githubUser: userInfo
+    });
+
+    console.log('[Background] 토큰 및 사용자 정보 저장 완료');
+
+    // 모든 열린 팝업에 로그인 성공 브로드캐스트
+    broadcastAuthSuccess(userInfo);
 
     return {
       success: true,
@@ -137,6 +144,17 @@ async function handlePollForToken(data) {
   }
 
   throw new Error('토큰 발급 실패');
+}
+
+// 인증 성공 브로드캐스트 - 열린 팝업에 알림
+function broadcastAuthSuccess(user) {
+  chrome.runtime.sendMessage({
+    type: 'AUTH_SUCCESS',
+    user: user
+  }).catch(() => {
+    // 팝업이 닫혀있으면 에러 무시 - 정상 동작
+    console.log('[Background] 브로드캐스트: 열린 팝업 없음 (정상)');
+  });
 }
 
 // 사용자 정보 조회
