@@ -353,13 +353,34 @@ async function handlePushDynamicProblem(data) {
     // 경로: programmers/other/문제.py 또는 baekjoon/other/문제.py
     const filePath = `${platformFolder}/other/${fileName}`;
 
-    // 커밋 메시지 생성
+    // 날짜와 시간 포맷 (한국 시간) - 기존 문제와 동일한 형식
     const now = new Date();
-    const dateStr = now.toLocaleDateString('ko-KR');
-    const commitMessage = `[${platformLabel}] ${title} 풀이 제출\n\n- 문제 ID: ${problemId}\n- 난이도: ${difficulty || 'unknown'}\n- 제출일: ${dateStr}\n- 작성자: ${studentName || '학생'}`;
+    const dateTime = now.toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
 
-    // 코드에 헤더 추가
-    const codeWithHeader = `# ${title}\n# 문제 ID: ${problemId}\n# 플랫폼: ${platform}\n# 난이도: ${difficulty || 'unknown'}\n# 제출일: ${dateStr}\n\n${code}`;
+    // 문제 URL 생성
+    const problemUrl = platform === 'programmers'
+      ? `https://school.programmers.co.kr/learn/courses/30/lessons/${problemId}`
+      : `https://www.acmicpc.net/problem/${problemId}`;
+
+    // 커밋 메시지 생성
+    const commitMessage = `[${platformLabel}] ${title} 풀이 제출\n\n- 문제 ID: ${problemId}\n- 난이도: ${difficulty || 'unknown'}\n- 제출일: ${dateTime}\n- 작성자: ${studentName || '학생'}`;
+
+    // 코드에 헤더 추가 (기존 문제와 동일한 형식)
+    const codeWithHeader = `# ${title}
+# ${platformLabel} (${difficulty || 'unknown'})
+# 문제 링크: ${problemUrl}
+# 작성자: ${studentName || '학생'}
+# 작성일: ${dateTime}
+
+${code}`;
 
     // GitHub에 푸시
     const result = await api.pushFile(filePath, codeWithHeader, commitMessage);
