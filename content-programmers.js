@@ -8,6 +8,96 @@
   let hasProcessedResult = false;
   let checkResultInterval = null;
 
+  // 현재 선택된 프로그래밍 언어 감지
+  function getCurrentLanguage() {
+    // 1. 언어 선택 버튼에서 확인 (가장 신뢰도 높음)
+    const langButton = document.querySelector('button[class*="language"]') ||
+                       document.querySelector('.navbar button') ||
+                       document.querySelector('[class*="Language"] button');
+
+    if (langButton) {
+      const langText = langButton.textContent.trim().toLowerCase();
+      console.log('[SPARTA Python] 언어 버튼 텍스트:', langText);
+      return langText;
+    }
+
+    // 2. 탭 영역의 버튼들에서 확인
+    const tabButtons = document.querySelectorAll('button');
+    for (const btn of tabButtons) {
+      const text = btn.textContent.trim().toLowerCase();
+      // SQL 관련 언어 감지
+      if (text === 'mysql' || text === 'oracle' || text === 'sql') {
+        console.log('[SPARTA Python] SQL 언어 감지:', text);
+        return text;
+      }
+      // Python 관련 언어 감지
+      if (text.includes('python')) {
+        console.log('[SPARTA Python] Python 언어 감지:', text);
+        return text;
+      }
+    }
+
+    // 3. 파일 탭에서 확장자 확인
+    const fileTab = document.querySelector('[class*="file-tab"]') ||
+                    document.querySelector('.nav-tabs .active') ||
+                    document.querySelector('[class*="solution"]');
+
+    if (fileTab) {
+      const fileName = fileTab.textContent.trim().toLowerCase();
+      console.log('[SPARTA Python] 파일 탭:', fileName);
+      if (fileName.includes('.sql')) return 'sql';
+      if (fileName.includes('.py')) return 'python';
+    }
+
+    // 4. 에디터 파일명에서 확인
+    const editorTab = document.querySelector('[class*="editor"] [class*="tab"]');
+    if (editorTab) {
+      const tabText = editorTab.textContent.trim().toLowerCase();
+      if (tabText.includes('.sql') || tabText.includes('solution.sql')) return 'sql';
+      if (tabText.includes('.py') || tabText.includes('solution.py')) return 'python';
+    }
+
+    console.log('[SPARTA Python] 언어 감지 실패, unknown 반환');
+    return 'unknown';
+  }
+
+  // SQL 문제인지 확인
+  function isSQLProblem() {
+    const lang = getCurrentLanguage();
+    const sqlLanguages = ['mysql', 'oracle', 'sql', 'postgresql', 'mariadb'];
+
+    if (sqlLanguages.includes(lang)) {
+      console.log('[SPARTA Python] SQL 문제 감지됨, 처리 건너뜀');
+      return true;
+    }
+
+    // breadcrumb에서 SQL 카테고리 확인
+    const breadcrumb = document.querySelector('.breadcrumb') ||
+                       document.querySelector('nav[aria-label="breadcrumb"]') ||
+                       document.querySelector('[class*="breadcrumb"]');
+
+    if (breadcrumb) {
+      const breadcrumbText = breadcrumb.textContent.toLowerCase();
+      const sqlCategories = ['select', 'join', 'group by', 'string', 'date', 'is null', 'sum, max, min'];
+
+      for (const category of sqlCategories) {
+        if (breadcrumbText.includes(category) && !breadcrumbText.includes('알고리즘')) {
+          // SELECT 같은 SQL 카테고리가 있고, 일반 알고리즘이 아니면 SQL 문제
+          const buttons = document.querySelectorAll('button');
+          for (const btn of buttons) {
+            const text = btn.textContent.trim().toLowerCase();
+            if (text === 'mysql' || text === 'oracle') {
+              console.log('[SPARTA Python] breadcrumb에서 SQL 카테고리 감지:', category);
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
   // 문제 ID 추출 (URL에서)
   function getProblemId() {
     const url = window.location.href;
@@ -482,6 +572,12 @@
   // 초기화
   async function init() {
     console.log('[SPARTA Python] 초기화 시작');
+
+    // SQL 문제인 경우 처리하지 않음 (Python 전용 익스텐션)
+    if (isSQLProblem()) {
+      console.log('[SPARTA Python] SQL 문제 감지됨 - Python 익스텐션이므로 처리 건너뜀');
+      return;
+    }
 
     const settingsOk = await checkGitHubSettings();
     if (!settingsOk) {
