@@ -258,36 +258,30 @@
       return false;
     }
 
-    // 정답 패턴
-    if (text.includes('정답입니다') ||
-        text.includes('테스트를 통과') ||
-        text.includes('통과 (') ||
-        text.includes('Pass') ||
-        text.includes('맞았습니다') ||
-        text.includes('100.0') ||
-        /테스트 \d+.*통과/.test(text) ||
-        /정확성.*100/.test(text)) {
-      console.log('[SPARTA Python] 정답 감지!');
-      return true;
-    }
-
-    // 오답 패턴
+    // 오답 패턴 (성공 패턴보다 먼저 체크 - false positive 방지)
     if (text.includes('실패') ||
         text.includes('오답') ||
         text.includes('Fail') ||
-        text.includes('틀렸') ||
-        text.includes('실패 (') ||
-        text.includes('0.0')) {
+        text.includes('틀렸')) {
       console.log('[SPARTA Python] 오답 감지');
       return false;
     }
 
-    // 테스트 결과 개수로 판별
+    // 테스트 결과 개수로 판별 (성공 패턴보다 먼저 체크)
     const passMatch = text.match(/(\d+)개 성공/);
     const failMatch = text.match(/(\d+)개 실패/);
     if (passMatch || failMatch) {
       const failCount = failMatch ? parseInt(failMatch[1]) : 0;
       return failCount === 0;
+    }
+
+    // 정답 패턴 (엄격한 최종 확정 메시지만 유지)
+    if (text.includes('정답입니다') ||
+        text.includes('테스트를 통과') ||
+        text.includes('맞았습니다') ||
+        /정확성.*100/.test(text)) {
+      console.log('[SPARTA Python] 정답 감지!');
+      return true;
     }
 
     // 점수 영역 확인
@@ -304,7 +298,7 @@
 
     if (modal) {
       const modalText = modal.textContent || '';
-      if (modalText.includes('정답') || modalText.includes('100') || modalText.includes('통과')) {
+      if (modalText.includes('정답') || /정확성.*100/.test(modalText) || modalText.includes('테스트를 통과')) {
         return true;
       } else if (modalText.includes('실패') || modalText.includes('오답')) {
         return false;
@@ -357,9 +351,12 @@
     `;
     notification.textContent = message;
 
-    const style = document.createElement('style');
-    style.textContent = `@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`;
-    document.head.appendChild(style);
+    if (!document.getElementById('sparta-python-notification-style')) {
+      const style = document.createElement('style');
+      style.id = 'sparta-python-notification-style';
+      style.textContent = `@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`;
+      document.head.appendChild(style);
+    }
 
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 3000);
@@ -581,8 +578,8 @@
 
     const settingsOk = await checkGitHubSettings();
     if (!settingsOk) {
-      console.log('[SPARTA Python] 설정 미완료');
-      return;
+      console.log('[SPARTA Python] 설정 미완료 - 제출 버튼 감시는 계속 진행');
+      // 설정 미완료여도 버튼 감시는 시작 (pushToGitHub 시점에서 재확인함)
     }
 
     const problemId = getProblemId();

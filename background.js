@@ -245,13 +245,18 @@ async function handleCheckAuth() {
     return { success: true, authenticated: false };
   }
 
-  // 토큰 유효성 검사
+  // 토큰 유효성 검사 (true: 유효, false: 무효, null: 네트워크 오류)
   const isValid = await validateToken(githubToken);
 
-  if (!isValid) {
-    // 토큰이 유효하지 않으면 삭제
+  if (isValid === false) {
+    // 토큰이 명확히 무효 (401/403) → 삭제
     await logout();
     return { success: true, authenticated: false };
+  }
+
+  // isValid === null (네트워크 오류) → 기존 토큰 유지, 캐시된 정보 사용
+  if (isValid === null) {
+    console.log('[Background] 네트워크 오류로 토큰 검증 불가, 기존 토큰 유지');
   }
 
   return {

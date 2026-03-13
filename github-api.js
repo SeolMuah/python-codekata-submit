@@ -111,6 +111,27 @@ class GitHubAPI {
           message: fileInfo.exists ? '파일 업데이트 완료' : '파일 생성 완료',
           url: data.content.html_url
         };
+      } else if (response.status === 409) {
+        // SHA 불일치 (빠른 연속 제출 등) → SHA 재조회 후 1회 재시도
+        console.log('[GitHubAPI] 409 Conflict, SHA 재조회 후 재시도');
+        const retryFileInfo = await this.getFileSha(path);
+        const retryBody = {
+          message: message,
+          content: this.encodeContent(content)
+        };
+        if (retryFileInfo.exists && retryFileInfo.sha) {
+          retryBody.sha = retryFileInfo.sha;
+        }
+        const retryResponse = await fetch(
+          `${this.baseUrl}/repos/${this.owner}/${this.repo}/contents/${path}`,
+          { method: 'PUT', headers: this.getHeaders(), body: JSON.stringify(retryBody) }
+        );
+        if (retryResponse.status === 200 || retryResponse.status === 201) {
+          const retryData = await retryResponse.json();
+          return { success: true, message: '파일 업데이트 완료 (재시도)', url: retryData.content.html_url };
+        }
+        const retryError = await retryResponse.json();
+        return { success: false, message: retryError.message || 'GitHub 업로드 실패 (재시도)' };
       } else if (response.status === 401) {
         return { success: false, message: '인증이 만료되었습니다. 다시 로그인해주세요' };
       } else if (response.status === 404) {

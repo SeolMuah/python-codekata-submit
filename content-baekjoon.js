@@ -158,9 +158,12 @@
     `;
     notification.textContent = message;
 
-    const style = document.createElement('style');
-    style.textContent = `@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`;
-    document.head.appendChild(style);
+    if (!document.getElementById('sparta-python-notification-style')) {
+      const style = document.createElement('style');
+      style.id = 'sparta-python-notification-style';
+      style.textContent = `@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`;
+      document.head.appendChild(style);
+    }
 
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 3000);
@@ -533,14 +536,20 @@
     console.log('[SPARTA Python] 페이지 타입:', pageType);
 
     switch (pageType) {
-      case 'submit':
+      case 'submit': {
         initSubmitPage();
+        // initSubmitPage에서 계산한 dynamicInfo를 클로저로 캡처
+        const submitProblemId = getProblemId();
+        let submitDynamicInfo = null;
+        if (submitProblemId && !getProblemByProblemId(submitProblemId, 'baekjoon')) {
+          submitDynamicInfo = extractProblemInfoFromPage(submitProblemId);
+        }
         // 버튼이 동적으로 로드될 수 있으므로 주기적 확인
         setInterval(() => {
-          const problemId = getProblemId();
-          if (problemId) observeSubmitButton(problemId);
+          if (submitProblemId) observeSubmitButton(submitProblemId, submitDynamicInfo);
         }, 2000);
         break;
+      }
 
       case 'status':
         initStatusPage();

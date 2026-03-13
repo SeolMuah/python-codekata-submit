@@ -69,15 +69,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 인증 상태 감시 인터벌 (최상단에 선언해야 temporal dead zone 회피)
   let authWatchInterval = null;
 
+  // 로그인 완료 처리 중복 방지 플래그
+  let loginProcessed = false;
+
   // ========== 인증 상태 자동 업데이트 리스너 ==========
 
   // 인증 상태 확인 및 UI 업데이트 함수 (재사용)
   async function checkAndUpdateAuthState() {
+    // 로그인 성공 처리가 이미 완료된 경우 스킵
+    if (loginProcessed) {
+      console.log('[SPARTA Python] 로그인 이미 처리됨, 스킵');
+      return;
+    }
+
     try {
       const authResult = await chrome.runtime.sendMessage({ type: 'CHECK_AUTH' });
       console.log('[SPARTA Python] 인증 상태 업데이트:', authResult);
 
       if (authResult.success && authResult.authenticated && authResult.user) {
+        // 첫 번째 성공 감지 시 플래그 설정
+        loginProcessed = true;
+
         showLoggedInState(authResult.user, authResult.repo);
         nextProblemContainer.classList.remove('hidden');
         await loadUserRepos();
@@ -323,8 +335,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // OAuth 플로우 시작 (백그라운드 자동화 버전)
   async function startOAuthFlow() {
     try {
+      // 양쪽 버튼 모두 비활성화 (이중 클릭 방지)
       loginWithGithub.disabled = true;
       loginWithGithub.textContent = '연결 중...';
+      settingsLoginBtn.disabled = true;
+      settingsLoginBtn.textContent = '연결 중...';
 
       // Step 1: Device Flow 시작
       const deviceResult = await chrome.runtime.sendMessage({ type: 'START_DEVICE_FLOW' });
@@ -381,6 +396,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     authWatchInterval = setInterval(async () => {
       try {
+        // 이미 다른 메커니즘(storage.onChanged, AUTH_SUCCESS)에서 처리됨
+        if (loginProcessed) {
+          clearInterval(authWatchInterval);
+          authWatchInterval = null;
+          return;
+        }
+
         const authResult = await chrome.runtime.sendMessage({ type: 'CHECK_AUTH' });
 
         if (authResult.success && authResult.authenticated) {
@@ -389,18 +411,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           clearInterval(authWatchInterval);
           authWatchInterval = null;
 
-          // UI 상태 업데이트
-          showLoggedInState(authResult.user, authResult.repo);
-          nextProblemContainer.classList.remove('hidden');
-          await loadUserRepos();
-
-          // progress 데이터 로드 및 UI 업데이트
-          const { progress = {} } = await chrome.storage.sync.get(['progress']);
-          updateProgress(progress);
-          showNextProblem(progress);
-
-          showToast('GitHub 로그인 성공!');
-          resetLoginUI();
+          // checkAndUpdateAuthState에서 중복 방지 처리
+          await checkAndUpdateAuthState();
         }
       } catch (error) {
         // 에러 무시 (팝업이 닫히면 발생할 수 있음)
@@ -431,6 +443,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const result = await chrome.runtime.sendMessage({ type: 'LOGOUT' });
 
       if (result.success) {
+        // 로그인 플래그 리셋 (재로그인 가능하도록)
+        loginProcessed = false;
+
         // UI 상태 완전 초기화
         showLoggedOutState();
         resetLoginUI();  // 로그인 UI도 초기 상태로
@@ -561,6 +576,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 사용자 저장소 목록 로드
   async function loadUserRepos() {
     try {
+      // 로딩 중 피드백 표시
+      repoSelect.innerHTML = '<option value="">로딩 중...</option>';
+      settingsRepoSelect.innerHTML = '<option value="">로딩 중...</option>';
+
       const result = await chrome.runtime.sendMessage({ type: 'GET_USER_REPOS' });
 
       if (result.success) {
@@ -582,6 +601,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     } catch (error) {
       console.error('[SPARTA Python] 저장소 목록 로드 오류:', error);
+      // 로딩 실패 시 기본 상태로 복원
+      repoSelect.innerHTML = '<option value="">저장소를 선택하세요...</option>';
+      settingsRepoSelect.innerHTML = '<option value="">저장소를 선택하세요...</option>';
     }
   }
 
@@ -640,6 +662,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
     loginWithGithub.classList.remove('hidden');
     deviceCodeSection.classList.add('hidden');
+
+    // 설정 탭 로그인 버튼도 리셋
+    settingsLoginBtn.disabled = false;
+    settingsLoginBtn.innerHTML = `
+      <svg viewBox="0 0 16 16">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      GitHub로 로그인
+    `;
   }
 
   // ========== 기존 함수 ==========

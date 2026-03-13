@@ -233,6 +233,7 @@ async function createRepo(token, repoName = 'python-codekata') {
 }
 
 // 6. 토큰 유효성 검사
+// 반환값: true (유효), false (인증 실패/토큰 무효), null (네트워크 오류로 판단 불가)
 async function validateToken(token) {
   try {
     const response = await fetchWithTimeout(GITHUB_USER_URL, {
@@ -241,9 +242,15 @@ async function validateToken(token) {
         'Accept': 'application/vnd.github+json'
       }
     }, 10000);  // 10초 타임아웃
-    return response.ok;
+
+    if (response.ok) return true;
+    // 401/403은 명확한 인증 실패
+    if (response.status === 401 || response.status === 403) return false;
+    // 기타 서버 오류(500 등)는 네트워크 문제로 간주
+    return null;
   } catch {
-    return false;
+    // fetch 실패 (네트워크 끊김, 타임아웃 등) → 판단 불가
+    return null;
   }
 }
 
