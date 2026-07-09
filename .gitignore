@@ -29,3 +29,9 @@ npm-debug.log
 # 임시 파일
 *.tmp
 *.temp
+
+# OMC 세션 상태 (에이전트 내부 산출물)
+.omc/
+
+# 크래시 덤프
+*.stackdump

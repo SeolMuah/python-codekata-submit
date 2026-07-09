@@ -1,4 +1,4 @@
-// GitHub API 모듈 - Python 코드카타 Chrome Extension
+// GitHub API 모듈 - Python 알고리즘 Chrome Extension
 // GitHub REST API를 사용하여 파일 생성/업데이트 (OAuth 토큰 지원)
 
 class GitHubAPI {
@@ -45,11 +45,19 @@ class GitHubAPI {
     }
   }
 
+  // Contents API URL 생성
+  // 경로 세그먼트를 개별 인코딩한다. '#' 이나 '?' 가 제목에 섞이면
+  // 인코딩 없이는 URL의 프래그먼트/쿼리로 해석되어 경로가 잘린다.
+  contentsUrl(path) {
+    const encoded = path.split('/').map(encodeURIComponent).join('/');
+    return `${this.baseUrl}/repos/${this.owner}/${this.repo}/contents/${encoded}`;
+  }
+
   // 파일 SHA 조회 (업데이트 시 필요)
   async getFileSha(path) {
     try {
       const response = await fetch(
-        `${this.baseUrl}/repos/${this.owner}/${this.repo}/contents/${path}`,
+        this.contentsUrl(path),
         {
           method: 'GET',
           headers: this.getHeaders()
@@ -96,7 +104,7 @@ class GitHubAPI {
       }
 
       const response = await fetch(
-        `${this.baseUrl}/repos/${this.owner}/${this.repo}/contents/${path}`,
+        this.contentsUrl(path),
         {
           method: 'PUT',
           headers: this.getHeaders(),
@@ -123,7 +131,7 @@ class GitHubAPI {
           retryBody.sha = retryFileInfo.sha;
         }
         const retryResponse = await fetch(
-          `${this.baseUrl}/repos/${this.owner}/${this.repo}/contents/${path}`,
+          this.contentsUrl(path),
           { method: 'PUT', headers: this.getHeaders(), body: JSON.stringify(retryBody) }
         );
         if (retryResponse.status === 200 || retryResponse.status === 201) {
@@ -152,7 +160,7 @@ class GitHubAPI {
     return await this.createOrUpdateFile(path, content, message);
   }
 
-  // 코드카타 문제 풀이 코드 업로드
+  // 알고리즘 문제 풀이 코드 업로드
   async pushSolution(problem, code, studentName) {
     const path = getGitHubPath(problem);
 
@@ -162,7 +170,7 @@ class GitHubAPI {
 
     // 커밋 메시지 생성
     const diffInfo = DIFFICULTY_INFO[problem.difficulty];
-    const platformName = problem.platform === 'programmers' ? '프로그래머스' : '백준';
+    const platformName = '프로그래머스';
     const message = `[${platformName}] ${diffInfo.name} - ${problem.title} (#${problem.id})`;
 
     return await this.createOrUpdateFile(path, fullContent, message);
@@ -171,7 +179,7 @@ class GitHubAPI {
   // 파일 헤더 생성
   generateFileHeader(problem, studentName) {
     const diffInfo = DIFFICULTY_INFO[problem.difficulty];
-    const platformName = problem.platform === 'programmers' ? '프로그래머스' : '백준';
+    const platformName = '프로그래머스';
     const url = getProblemUrl(problem);
 
     // 날짜와 시간 포맷 (한국 시간)

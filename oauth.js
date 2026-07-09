@@ -46,7 +46,9 @@ async function requestDeviceCode() {
     },
     body: JSON.stringify({
       client_id: GITHUB_CLIENT_ID,
-      scope: 'repo user'
+      // public_repo: 공개 저장소 읽기/쓰기, read:user: 프로필 조회
+      // (기존 'repo user'에서 축소 — private 저장소 접근 불가)
+      scope: 'public_repo read:user'
     })
   }, 15000);  // 15초 타임아웃
 
@@ -55,7 +57,9 @@ async function requestDeviceCode() {
   }
 
   const data = await response.json();
-  console.log('[OAuth] Device Code 응답:', data);
+  // 보안: device_code 는 bearer 시크릿이므로 로깅 금지 (CLAUDE.md: 콘솔에 토큰 출력 금지).
+  // 비밀이 아닌 만료 시간만 남긴다.
+  console.log('[OAuth] Device Code 발급됨, 만료(s):', data.expires_in);
 
   // 응답 형식:
   // {
@@ -69,79 +73,48 @@ async function requestDeviceCode() {
   return data;
 }
 
-// 2. 토큰 폴링 (사용자가 인증할 때까지 대기)
-async function pollForToken(deviceCode, interval = 5, expiresIn = 900) {
-  const startTime = Date.now();
-  const maxTime = expiresIn * 1000;
-  let currentInterval = interval;
-
-  while (Date.now() - startTime < maxTime) {
-    await sleep(currentInterval * 1000);
-
-    try {
-      const response = await fetch(GITHUB_TOKEN_URL, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          client_id: GITHUB_CLIENT_ID,
-          device_code: deviceCode,
-          grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
-        })
-      });
-
-      const data = await response.json();
-      console.log('[OAuth] 토큰 폴링 응답:', data);
-
-      // 성공: 토큰 발급
-      if (data.access_token) {
-        return {
-          success: true,
-          access_token: data.access_token,
-          token_type: data.token_type,
-          scope: data.scope
-        };
-      }
-
-      // 대기 중
-      if (data.error === 'authorization_pending') {
-        console.log('[OAuth] 사용자 인증 대기 중...');
-        continue;
-      }
-
-      // 속도 제한
-      if (data.error === 'slow_down') {
-        currentInterval += 5;
-        console.log('[OAuth] 속도 제한, 간격 증가:', currentInterval);
-        continue;
-      }
-
-      // 만료
-      if (data.error === 'expired_token') {
-        throw new Error('인증 시간이 만료되었습니다. 다시 시도해주세요.');
-      }
-
-      // 접근 거부
-      if (data.error === 'access_denied') {
-        throw new Error('사용자가 권한을 거부했습니다.');
-      }
-
-      // 기타 오류
-      if (data.error) {
-        throw new Error(data.error_description || data.error);
-      }
-    } catch (error) {
-      if (error.message.includes('fetch')) {
-        console.error('[OAuth] 네트워크 오류:', error);
-        continue;
-      }
-      throw error;
-    }
+// 2. 토큰 교환 1회 시도.
+//
+// ⚠️ 절대 여기서 while + sleep 으로 오래 기다리지 마라.
+// MV3 서비스 워커는 유휴 30초쯤에 종료된다. 긴 폴링 루프는 사용자가 GitHub에서
+// Authorize 를 누르기 전에 조용히 죽어버려서 "인증했는데 반응이 없는" 증상이 된다.
+// 반복은 background.js 가 chrome.alarms 로 돌린다.
+//
+// 반환: { status: 'success' | 'pending' | 'slow_down' | 'expired' | 'denied' | 'error' | 'network' }
+async function requestTokenOnce(deviceCode) {
+  let data;
+  try {
+    const response = await fetchWithTimeout(GITHUB_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: GITHUB_CLIENT_ID,
+        device_code: deviceCode,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
+      })
+    }, 15000);
+    data = await response.json();
+  } catch (error) {
+    // 네트워크 실패는 실패로 확정하지 않는다. 다음 알람에서 다시 시도한다.
+    console.warn('[OAuth] 토큰 요청 네트워크 오류:', error.message);
+    return { status: 'network' };
   }
 
-  throw new Error('인증 시간이 초과되었습니다. 다시 시도해주세요.');
+  // 보안: 응답에는 성공 시 access_token 이 들어 있으므로 원본을 로깅하지 않는다.
+  console.log('[OAuth] 토큰 응답:', data.error || 'access_token received');
+
+  if (data.access_token) {
+    return { status: 'success', access_token: data.access_token, scope: data.scope };
+  }
+  if (data.error === 'authorization_pending') return { status: 'pending' };
+  if (data.error === 'slow_down') return { status: 'slow_down' };
+  if (data.error === 'expired_token') return { status: 'expired' };
+  if (data.error === 'access_denied') return { status: 'denied' };
+
+  return { status: 'error', message: data.error_description || data.error || '알 수 없는 오류' };
 }
 
 // 3. 사용자 정보 가져오기
@@ -170,8 +143,9 @@ async function getUserInfo(token) {
 // 4. 사용자 저장소 목록 가져오기
 async function getUserRepos(token) {
   // 캐시 무효화를 위한 타임스탬프 추가
+  // visibility=public: 스코프가 public_repo로 축소됨에 따라 공개 저장소만 조회
   const timestamp = Date.now();
-  const response = await fetchWithTimeout(`${GITHUB_REPOS_URL}?per_page=100&sort=updated&_t=${timestamp}`, {
+  const response = await fetchWithTimeout(`${GITHUB_REPOS_URL}?per_page=100&sort=updated&visibility=public&_t=${timestamp}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/vnd.github+json',
@@ -196,7 +170,7 @@ async function getUserRepos(token) {
 }
 
 // 5. 새 저장소 생성
-async function createRepo(token, repoName = 'python-codekata') {
+async function createRepo(token, repoName = 'python-algorithm') {
   const response = await fetchWithTimeout(GITHUB_REPOS_URL, {
     method: 'POST',
     headers: {
@@ -207,7 +181,7 @@ async function createRepo(token, repoName = 'python-codekata') {
     },
     body: JSON.stringify({
       name: repoName,
-      description: 'SPARTA Python 코드카타 풀이 저장소',
+      description: 'Python 알고리즘 풀이 저장소',
       private: false,
       auto_init: true,
       has_issues: false,
@@ -256,7 +230,8 @@ async function validateToken(token) {
 
 // 7. 로그아웃 (토큰 삭제)
 async function logout() {
-  await chrome.storage.local.remove(['githubToken', 'githubUser']);
+  // 진행 중 device flow 상태도 함께 삭제
+  await chrome.storage.local.remove(['githubToken', 'githubUser', 'pendingDeviceAuth']);
   await chrome.storage.sync.remove(['githubRepo']);
   console.log('[OAuth] 로그아웃 완료');
 }

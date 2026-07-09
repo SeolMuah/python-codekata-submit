@@ -1,8 +1,8 @@
-// Popup 스크립트 - Python 코드카타 Chrome Extension (OAuth 버전)
-console.log('[SPARTA Python] popup.js 로드됨');
+// Popup 스크립트 - Python 알고리즘 Chrome Extension (OAuth 버전)
+console.log('[Python 알고리즘] popup.js 로드됨');
 
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('[SPARTA Python] DOMContentLoaded 실행');
+  console.log('[Python 알고리즘] DOMContentLoaded 실행');
 
   // DOM 요소 - 프로필
   const profileSetup = document.getElementById('profileSetup');
@@ -16,17 +16,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   const headerStats = document.getElementById('headerStats');
   const totalPercent = document.getElementById('totalPercent');
   const progCount = document.getElementById('progCount');
-  const baekCount = document.getElementById('baekCount');
 
   // DOM 요소 - 탭
   const progTabCount = document.getElementById('progTabCount');
-  const baekTabCount = document.getElementById('baekTabCount');
   const beginnerTabCount = document.getElementById('beginnerTabCount');
   const beginnerCount = document.getElementById('beginnerCount');
 
   // DOM 요소 - 다음 문제
   const nextProblemContainer = document.getElementById('nextProblemContainer');
   const completeContainer = document.getElementById('completeContainer');
+  const completeDesc = document.getElementById('completeDesc');
   const nextProblem = document.getElementById('nextProblem');
   const nextTitle = document.getElementById('nextTitle');
   const nextDifficulty = document.getElementById('nextDifficulty');
@@ -39,6 +38,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const deviceCodeSection = document.getElementById('deviceCodeSection');
   const userCodeDisplay = document.getElementById('userCode');
   const verificationLink = document.getElementById('verificationLink');
+  const deviceCountdown = document.getElementById('deviceCountdown');
   const userSection = document.getElementById('userSection');
   const userAvatar = document.getElementById('userAvatar');
   const userName = document.getElementById('userName');
@@ -63,14 +63,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const resetBtn = document.getElementById('resetBtn');
 
+  // 진행률 (스토리지 로드 전 안전한 기본값)
+  let progress = {};
+
+  // 연결된 GitHub 저장소 "owner/repo" (없으면 빈 문자열)
+  let currentRepo = '';
+
   // 현재 추천 문제
   let currentNextProblem = null;
 
-  // 인증 상태 감시 인터벌 (최상단에 선언해야 temporal dead zone 회피)
-  let authWatchInterval = null;
+  // Device Flow 남은 시간 카운트다운 인터벌 (표시 전용)
+  let deviceCountdownInterval = null;
 
   // 로그인 완료 처리 중복 방지 플래그
   let loginProcessed = false;
+
+  // 접기/펼치기 그룹 목록 (프로그래머스 난이도 + 기초·입문)
+  // 각 그룹: { problems, listEl, countEl, fillEl, total, rendered }
+  const groups = [];
+
+  // 플랫폼 이름 (프로그래머스 단일)
+  const PLATFORM_NAMES = {
+    programmers: '프로그래머스'
+  };
 
   // ========== 인증 상태 자동 업데이트 리스너 ==========
 
@@ -78,13 +93,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function checkAndUpdateAuthState() {
     // 로그인 성공 처리가 이미 완료된 경우 스킵
     if (loginProcessed) {
-      console.log('[SPARTA Python] 로그인 이미 처리됨, 스킵');
+      console.log('[Python 알고리즘] 로그인 이미 처리됨, 스킵');
       return;
     }
 
     try {
       const authResult = await chrome.runtime.sendMessage({ type: 'CHECK_AUTH' });
-      console.log('[SPARTA Python] 인증 상태 업데이트:', authResult);
+      console.log('[Python 알고리즘] 인증 상태 업데이트:', authResult);
 
       if (authResult.success && authResult.authenticated && authResult.user) {
         // 첫 번째 성공 감지 시 플래그 설정
@@ -95,85 +110,72 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadUserRepos();
 
         // progress 데이터 로드 및 UI 업데이트
-        const { progress = {} } = await chrome.storage.sync.get(['progress']);
-        updateProgress(progress);
-        showNextProblem(progress);
+        const { progress: syncProgress = {} } = await chrome.storage.sync.get(['progress']);
+        reconcileProgress(syncProgress);
 
         showToast('GitHub 로그인 성공!');
         resetLoginUI();
       }
     } catch (error) {
-      console.error('[SPARTA Python] 인증 상태 업데이트 오류:', error);
+      console.error('[Python 알고리즘] 인증 상태 업데이트 오류:', error);
     }
   }
 
   // Storage 변경 감지 리스너 - 토큰/진행률 변경 시 즉시 UI 업데이트
+  // (기존 setInterval 기반 CHECK_AUTH 폴링을 대체)
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local') {
       // 토큰이 추가됨 (로그인 성공)
       if (changes.githubToken?.newValue && !changes.githubToken?.oldValue) {
-        console.log('[SPARTA Python] 토큰 감지됨 - UI 업데이트');
+        console.log('[Python 알고리즘] 토큰 감지됨 - UI 업데이트');
         checkAndUpdateAuthState();
       }
       // 토큰이 삭제됨 (로그아웃)
       if (!changes.githubToken?.newValue && changes.githubToken?.oldValue) {
-        console.log('[SPARTA Python] 토큰 삭제됨 - 로그아웃 상태로 전환');
+        console.log('[Python 알고리즘] 토큰 삭제됨 - 로그아웃 상태로 전환');
         showLoggedOutState();
         nextProblemContainer.classList.add('hidden');
       }
     }
-    // 진행률 변경 감지 (sync storage)
+    // 진행률 변경 감지 (sync storage) - 항목/카운터만 갱신 (전체 재렌더 X)
     if (areaName === 'sync' && changes.progress) {
-      console.log('[SPARTA Python] 진행률 변경 감지됨');
-      const updatedProgress = changes.progress.newValue || {};
-      progress = updatedProgress;
-      updateProgress(progress);
-      showNextProblem(progress);
-      renderAllPlatforms(progress);  // 전체 UI 즉시 업데이트
+      console.log('[Python 알고리즘] 진행률 변경 감지됨');
+      reconcileProgress(changes.progress.newValue || {});
     }
   });
 
   // Background에서 브로드캐스트 수신 - 즉시 UI 업데이트
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'AUTH_SUCCESS') {
-      console.log('[SPARTA Python] AUTH_SUCCESS 브로드캐스트 수신');
+      console.log('[Python 알고리즘] AUTH_SUCCESS 브로드캐스트 수신');
       checkAndUpdateAuthState();
+    }
+    // 인증 만료/거부/실패 - 대기 화면을 접고 다시 시도할 수 있게 한다
+    if (message.type === 'AUTH_FAILED') {
+      console.warn('[Python 알고리즘] AUTH_FAILED 수신:', message.message);
+      resetLoginUI();
+      showToast(message.message || '인증에 실패했습니다. 다시 시도해주세요.', 'error');
     }
     // 진행률 업데이트 브로드캐스트 수신
     if (message.type === 'PROGRESS_UPDATED') {
-      console.log('[SPARTA Python] PROGRESS_UPDATED 브로드캐스트 수신:', message.problemId);
+      console.log('[Python 알고리즘] PROGRESS_UPDATED 브로드캐스트 수신:', message.problemId);
       chrome.storage.sync.get(['progress']).then(({ progress: updatedProgress }) => {
-        progress = updatedProgress || {};
-        updateProgress(progress);
-        showNextProblem(progress);
-        renderAllPlatforms(progress);
+        reconcileProgress(updatedProgress || {});
       });
     }
   });
 
   // 저장된 진행률 및 설정 로드
   const syncData = await chrome.storage.sync.get(['progress', 'studentName', 'githubRepo', 'autoSubmitEnabled']);
-  let progress = syncData.progress || {};
+  progress = syncData.progress || {};
+
+  // 연결된 저장소 (owner/repo). 문제 항목의 GitHub 바로가기에 쓰인다.
+  currentRepo = syncData.githubRepo || '';
+  refreshGitHubLinks();
 
   // 자동 제출 토글 초기화 (기본값: true)
   const autoSubmitEnabled = syncData.autoSubmitEnabled !== false;
   autoSubmitToggle.checked = autoSubmitEnabled;
-
-  // 플랫폼별 문제 수
-  const PLATFORM_COUNTS = {
-    programmers: 170,  // L1~L7 (중복 10개 제거됨)
-    baekjoon: 38,
-    beginner: 223  // 기초·입문 (코딩테스트 입문 100 + 코딩 기초 트레이닝 123)
-  };
-
-  // 총 문제 수
-  const TOTAL_PROBLEMS = 431;
-
-  // 플랫폼 이름
-  const PLATFORM_NAMES = {
-    programmers: '프로그래머스',
-    baekjoon: '백준'
-  };
 
   // 초기화 - 이름
   if (syncData.studentName) {
@@ -185,7 +187,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 인증 상태 확인 (강화된 검증)
   try {
     const authResult = await chrome.runtime.sendMessage({ type: 'CHECK_AUTH' });
-    console.log('[SPARTA Python] 인증 상태:', authResult);
+    console.log('[Python 알고리즘] 인증 상태:', authResult);
 
     // user 객체까지 확인하여 완전한 로그인 상태 검증
     if (authResult.success && authResult.authenticated && authResult.user) {
@@ -198,18 +200,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       // 로그인 안됨
       showLoggedOutState();
       nextProblemContainer.classList.add('hidden');
+      // 진행 중인 Device Flow가 있으면 인증 화면 복원
+      await restorePendingDeviceAuth();
     }
   } catch (error) {
-    console.error('[SPARTA Python] 초기 인증 상태 확인 실패:', error);
+    console.error('[Python 알고리즘] 초기 인증 상태 확인 실패:', error);
     showLoggedOutState();
     nextProblemContainer.classList.add('hidden');
+    await restorePendingDeviceAuth();
   }
 
-  // UI 업데이트
+  // UI 업데이트 (문제 목록은 lazy 렌더 - 헤더만 생성)
+  initTabs();
+  renderProblemLists();
   updateProgress(progress);
   showNextProblem(progress);
-  initTabs();
-  renderAllPlatforms(progress);
 
   // ========== OAuth 이벤트 리스너 ==========
 
@@ -291,10 +296,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   resetBtn.addEventListener('click', async () => {
     if (confirm('모든 진행 상황을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
       await chrome.storage.sync.set({ progress: {} });
-      progress = {};
-      updateProgress(progress);
-      showNextProblem(progress);
-      renderAllPlatforms(progress);
+      reconcileProgress({});
       showToast('진행 상황이 초기화되었습니다');
     }
   });
@@ -326,9 +328,96 @@ document.addEventListener('DOMContentLoaded', async () => {
           codeCopiedMsg.classList.add('hidden');
         }, 2000);
       }
-      console.log('[SPARTA Python] 코드 클립보드 복사 완료:', text);
+      console.log('[Python 알고리즘] 코드 클립보드 복사 완료');
     } catch (err) {
-      console.error('[SPARTA Python] 클립보드 복사 실패:', err);
+      console.error('[Python 알고리즘] 클립보드 복사 실패:', err);
+    }
+  }
+
+  // Device Code 인증 화면 표시 (신규 시작 / 재오픈 복원 공용)
+  function showDeviceCodeScreen(auth) {
+    userCodeDisplay.textContent = auth.user_code || 'XXXX-XXXX';
+    if (auth.verification_uri) {
+      verificationLink.href = auth.verification_uri;
+    }
+
+    // 로그인 버튼 숨기고 코드 화면 표시
+    loginWithGithub.classList.add('hidden');
+    deviceCodeSection.classList.remove('hidden');
+
+    // 양쪽 로그인 버튼 비활성화 (진행 중 표시)
+    loginWithGithub.disabled = true;
+    settingsLoginBtn.disabled = true;
+
+    // 남은 시간 카운트다운
+    if (auth.expires_at) {
+      startDeviceCountdown(auth.expires_at);
+    }
+  }
+
+  // 남은 시간 카운트다운 (분:초, 표시 전용 - 인증 폴링 아님)
+  function startDeviceCountdown(expiresAt) {
+    stopDeviceCountdown();
+
+    const tick = () => {
+      const remaining = expiresAt - Date.now();
+      if (remaining <= 0) {
+        handleDeviceExpired();
+        return;
+      }
+      const totalSec = Math.floor(remaining / 1000);
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      if (deviceCountdown) {
+        deviceCountdown.textContent = `${m}:${String(s).padStart(2, '0')} 남음`;
+      }
+    };
+
+    tick();
+    deviceCountdownInterval = setInterval(tick, 1000);
+  }
+
+  function stopDeviceCountdown() {
+    if (deviceCountdownInterval) {
+      clearInterval(deviceCountdownInterval);
+      deviceCountdownInterval = null;
+    }
+    if (deviceCountdown) {
+      deviceCountdown.textContent = '';
+    }
+  }
+
+  // 인증 시간 만료 처리 - 로그인 버튼으로 자동 복귀
+  async function handleDeviceExpired() {
+    stopDeviceCountdown();
+    try {
+      await chrome.storage.local.remove('pendingDeviceAuth');
+    } catch (e) {
+      console.error('[Python 알고리즘] pendingDeviceAuth 정리 실패:', e);
+    }
+    resetLoginUI();
+    showToast('인증 시간이 만료되었습니다. 다시 시도해주세요.', 'error');
+  }
+
+  // 팝업 재오픈 시 진행 중인 Device Flow 복원
+  async function restorePendingDeviceAuth() {
+    try {
+      const { pendingDeviceAuth } = await chrome.storage.local.get('pendingDeviceAuth');
+      if (!pendingDeviceAuth) return;
+
+      // 만료된 경우 정리하고 로그인 버튼 유지
+      if (!pendingDeviceAuth.expires_at || pendingDeviceAuth.expires_at <= Date.now()) {
+        await chrome.storage.local.remove('pendingDeviceAuth');
+        return;
+      }
+
+      console.log('[Python 알고리즘] 진행 중인 Device Flow 복원');
+      showDeviceCodeScreen(pendingDeviceAuth);
+
+      // 서비스 워커가 죽어 있었을 수 있다. 폴링을 되살리고 즉시 한 번 확인시킨다.
+      chrome.runtime.sendMessage({ type: 'POLL_DEVICE_AUTH_NOW' }).catch(() => {});
+    } catch (e) {
+      console.error('[Python 알고리즘] pendingDeviceAuth 복원 실패:', e);
     }
   }
 
@@ -343,22 +432,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Step 1: Device Flow 시작
       const deviceResult = await chrome.runtime.sendMessage({ type: 'START_DEVICE_FLOW' });
-      console.log('[SPARTA Python] Device Flow 결과:', deviceResult);
+      console.log('[Python 알고리즘] Device Flow 결과:', deviceResult);
 
       if (!deviceResult.success) {
         throw new Error(deviceResult.message || 'Device Flow 시작 실패');
       }
 
-      // Device Code 표시
-      userCodeDisplay.textContent = deviceResult.user_code;
-      verificationLink.href = deviceResult.verification_uri;
-      deviceCodeSection.classList.remove('hidden');
-      loginWithGithub.classList.add('hidden');
+      // 만료 시각 계산 후 인증 화면 표시 + 카운트다운
+      const expiresAt = Date.now() + (deviceResult.expires_in || 900) * 1000;
+      showDeviceCodeScreen({
+        user_code: deviceResult.user_code,
+        verification_uri: deviceResult.verification_uri,
+        expires_at: expiresAt
+      });
 
-      // 자동으로 코드 클립보드에 복사
+      // 자동으로 코드 클립보드에 복사 (자동 입력 실패 대비 폴백)
       await copyToClipboard(deviceResult.user_code);
 
-      // 자동으로 GitHub 인증 페이지 새 탭에서 열기
+      // 자동으로 GitHub 인증 페이지 새 탭에서 열기 (content script가 코드 자동 입력)
       chrome.tabs.create({ url: deviceResult.verification_uri });
 
       // Step 2: 백그라운드에 폴링 시작 요청 (await 하지 않음!)
@@ -372,73 +463,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }).catch(() => {
         // 팝업이 닫혀있어도 무시 - 백그라운드는 계속 진행
-        console.log('[SPARTA Python] 백그라운드에서 폴링 계속 진행');
+        console.log('[Python 알고리즘] 백그라운드에서 폴링 계속 진행');
       });
 
-      // Step 3: 인증 상태 변화 감시 시작
-      watchAuthStatusChanges();
+      // Step 3: 로그인 완료는 chrome.storage.onChanged(githubToken) /
+      //         AUTH_SUCCESS 브로드캐스트로 감지 (별도 폴링 불필요)
 
     } catch (error) {
-      console.error('[SPARTA Python] OAuth 오류:', error);
-      showToast('로그인 실패: ' + error.message);
+      console.error('[Python 알고리즘] OAuth 오류:', error);
+      showToast('로그인 실패: ' + error.message, 'error');
       resetLoginUI();
     }
-  }
-
-  // 인증 상태 변화 감시 (백그라운드 폴링 결과 확인)
-  function watchAuthStatusChanges() {
-    // 기존 인터벌 정리
-    if (authWatchInterval) {
-      clearInterval(authWatchInterval);
-    }
-
-    console.log('[SPARTA Python] 인증 상태 감시 시작');
-
-    authWatchInterval = setInterval(async () => {
-      try {
-        // 이미 다른 메커니즘(storage.onChanged, AUTH_SUCCESS)에서 처리됨
-        if (loginProcessed) {
-          clearInterval(authWatchInterval);
-          authWatchInterval = null;
-          return;
-        }
-
-        const authResult = await chrome.runtime.sendMessage({ type: 'CHECK_AUTH' });
-
-        if (authResult.success && authResult.authenticated) {
-          // 로그인 성공!
-          console.log('[SPARTA Python] 인증 성공 감지!');
-          clearInterval(authWatchInterval);
-          authWatchInterval = null;
-
-          // checkAndUpdateAuthState에서 중복 방지 처리
-          await checkAndUpdateAuthState();
-        }
-      } catch (error) {
-        // 에러 무시 (팝업이 닫히면 발생할 수 있음)
-        console.log('[SPARTA Python] 인증 상태 확인 중 오류 (무시됨):', error.message);
-      }
-    }, 1000); // 1초마다 확인
-
-    // 15분 후 자동 중단 (토큰 만료 시간)
-    setTimeout(() => {
-      if (authWatchInterval) {
-        console.log('[SPARTA Python] 인증 감시 타임아웃 (15분)');
-        clearInterval(authWatchInterval);
-        authWatchInterval = null;
-        resetLoginUI();
-      }
-    }, 15 * 60 * 1000);
   }
 
   // 로그아웃 처리 (완전한 상태 초기화)
   async function handleLogout() {
     try {
-      // 진행 중인 인증 폴링 중지
-      if (authWatchInterval) {
-        clearInterval(authWatchInterval);
-        authWatchInterval = null;
-      }
+      // 진행 중인 카운트다운 중지
+      stopDeviceCountdown();
 
       const result = await chrome.runtime.sendMessage({ type: 'LOGOUT' });
 
@@ -454,13 +496,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 저장소 선택 상태 초기화
         repoSelect.innerHTML = '<option value="">저장소를 선택하세요...</option>';
         settingsRepoSelect.innerHTML = '<option value="">저장소를 선택하세요...</option>';
+        currentRepo = '';
+        refreshGitHubLinks();
 
         showToast('로그아웃되었습니다');
       } else {
         showToast('로그아웃 실패: ' + (result.message || '알 수 없는 오류'), 'error');
       }
     } catch (error) {
-      console.error('[SPARTA Python] 로그아웃 오류:', error);
+      console.error('[Python 알고리즘] 로그아웃 오류:', error);
       showToast('로그아웃 실패: ' + error.message, 'error');
     }
   }
@@ -480,12 +524,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 두 select 동기화
         repoSelect.value = repoFullName;
         settingsRepoSelect.value = repoFullName;
+        currentRepo = repoFullName;
+        refreshGitHubLinks();
+        updateCreateRepoEmphasis(true);
         showToast('저장소가 선택되었습니다');
       } else {
         showToast('저장소 선택 실패: ' + result.message);
       }
     } catch (error) {
-      console.error('[SPARTA Python] 저장소 선택 오류:', error);
+      console.error('[Python 알고리즘] 저장소 선택 오류:', error);
       showToast('저장소 선택 실패');
     }
   }
@@ -500,7 +547,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const result = await chrome.runtime.sendMessage({
         type: 'CREATE_REPO',
-        data: { repoName: 'python-codekata' }
+        data: { repoName: 'python-algorithm' }
       });
 
       if (result.success) {
@@ -515,6 +562,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 새 저장소 선택
         repoSelect.value = fullName;
         settingsRepoSelect.value = fullName;
+        currentRepo = fullName;
+        refreshGitHubLinks();
+        updateCreateRepoEmphasis(true);
 
         // 저장소 선택 저장
         await chrome.runtime.sendMessage({
@@ -533,14 +583,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         showToast('저장소 생성 실패: ' + result.message);
       }
     } catch (error) {
-      console.error('[SPARTA Python] 저장소 생성 오류:', error);
+      console.error('[Python 알고리즘] 저장소 생성 오류:', error);
       showToast('저장소 생성 실패');
     } finally {
       createRepoBtn.disabled = false;
       settingsCreateRepoBtn.disabled = false;
-      createRepoBtn.textContent = '+ 새 저장소 만들기 (python-codekata)';
-      settingsCreateRepoBtn.textContent = '+ 새 저장소 만들기 (python-codekata)';
+      createRepoBtn.textContent = '+ 새 저장소 만들기 (python-algorithm)';
+      settingsCreateRepoBtn.textContent = '+ 새 저장소 만들기 (python-algorithm)';
     }
+  }
+
+  // 저장소 미선택 시 "저장소 만들기" 버튼 강조
+  function updateCreateRepoEmphasis(hasRepo) {
+    [createRepoBtn, settingsCreateRepoBtn].forEach(btn => {
+      if (!btn) return;
+      if (hasRepo) {
+        btn.classList.remove('primary');
+      } else {
+        btn.classList.add('primary');
+      }
+    });
   }
 
   // 드롭다운에 새 저장소 추가 (Optimistic UI)
@@ -598,12 +660,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           repoSelect.value = githubRepo;
           settingsRepoSelect.value = githubRepo;
         }
+        currentRepo = githubRepo || '';
+        refreshGitHubLinks();
+        // 저장소 미선택 시 생성 버튼 강조
+        updateCreateRepoEmphasis(!!githubRepo);
       }
     } catch (error) {
-      console.error('[SPARTA Python] 저장소 목록 로드 오류:', error);
+      console.error('[Python 알고리즘] 저장소 목록 로드 오류:', error);
       // 로딩 실패 시 기본 상태로 복원
       repoSelect.innerHTML = '<option value="">저장소를 선택하세요...</option>';
       settingsRepoSelect.innerHTML = '<option value="">저장소를 선택하세요...</option>';
+      updateCreateRepoEmphasis(false);
     }
   }
 
@@ -611,9 +678,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   function showLoggedInState(user, repo) {
     // 방어 코드: user 정보가 없으면 리턴
     if (!user || !user.login) {
-      console.warn('[SPARTA Python] showLoggedInState: user 정보 없음, 건너뜀');
+      console.warn('[Python 알고리즘] showLoggedInState: user 정보 없음, 건너뜀');
       return;
     }
+
+    // 진행 중이던 인증 화면 정리
+    stopDeviceCountdown();
+    deviceCodeSection.classList.add('hidden');
 
     // 메인 UI
     loginSection.classList.add('hidden');
@@ -647,11 +718,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 로그인 UI 리셋
   function resetLoginUI() {
-    // 인증 감시 인터벌 정리
-    if (authWatchInterval) {
-      clearInterval(authWatchInterval);
-      authWatchInterval = null;
-    }
+    // 진행 중인 카운트다운 정리
+    stopDeviceCountdown();
 
     loginWithGithub.disabled = false;
     loginWithGithub.innerHTML = `
@@ -689,37 +757,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentNameSpan.textContent = name;
   }
 
-  // 진행률 업데이트
+  // 진행률 업데이트 (헤더/진행률 카드/탭 카운트)
+  // ⚠️ 삭제된 문제의 유령 id는 getProblemById로 존재 확인 후 제외 → 393 초과 방지
   function updateProgress(progress) {
     const solvedIds = Object.keys(progress).filter(id => progress[id]?.completed);
-    const total = solvedIds.length;
 
-    // 프로그래머스 (difficulty > 0인 문제들만)
-    const progSolved = solvedIds.filter(id => {
-      const p = PROBLEMS.find(pr => pr.id === parseInt(id));
-      return p && p.platform === 'programmers' && p.difficulty > 0;
-    }).length;
+    let total = 0;          // 실제 존재하는 문제만 카운트
+    let progSolved = 0;     // 프로그래머스 메인 (difficulty >= 1)
+    let beginnerSolved = 0; // 기초·입문 (difficulty === 0)
 
-    // 백준
-    const baekSolved = solvedIds.filter(id => {
-      const p = PROBLEMS.find(pr => pr.id === parseInt(id));
-      return p && p.platform === 'baekjoon';
-    }).length;
-
-    // 기초·입문 (difficulty === 0인 문제들)
-    const beginnerSolved = solvedIds.filter(id => {
-      const p = PROBLEMS.find(pr => pr.id === parseInt(id));
-      return p && p.difficulty === 0;
-    }).length;
+    solvedIds.forEach(id => {
+      const p = getProblemById(id);
+      if (!p) return;       // 유령 id(삭제된 문제) 무시
+      total++;
+      if (p.difficulty === 0) {
+        beginnerSolved++;
+      } else {
+        progSolved++;
+      }
+    });
 
     headerStats.textContent = `${total}/${TOTAL_PROBLEMS}`;
     totalPercent.textContent = `${Math.round((total / TOTAL_PROBLEMS) * 100)}%`;
     progCount.textContent = progSolved;
-    baekCount.textContent = baekSolved;
     beginnerCount.textContent = beginnerSolved;
-    progTabCount.textContent = `${progSolved}/${PLATFORM_COUNTS.programmers}`;
-    baekTabCount.textContent = `${baekSolved}/${PLATFORM_COUNTS.baekjoon}`;
-    beginnerTabCount.textContent = `${beginnerSolved}/${PLATFORM_COUNTS.beginner}`;
+    progTabCount.textContent = `${progSolved}/${PROBLEM_COUNTS.main}`;
+    beginnerTabCount.textContent = `${beginnerSolved}/${PROBLEM_COUNTS.beginner}`;
   }
 
   // 다음 문제 추천
@@ -737,6 +800,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (unsolved.length === 0) {
       nextProblemContainer.classList.add('hidden');
       completeContainer.classList.remove('hidden');
+      if (completeDesc) {
+        completeDesc.textContent = `${TOTAL_PROBLEMS}개 문제를 모두 해결했습니다`;
+      }
       currentNextProblem = null;
       return;
     }
@@ -748,7 +814,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     nextTitle.textContent = `#${currentNextProblem.id} ${currentNextProblem.title}`;
     nextDifficulty.textContent = diffInfo.display;
-    nextPlatform.textContent = PLATFORM_NAMES[currentNextProblem.platform];
+    nextPlatform.textContent = PLATFORM_NAMES[currentNextProblem.platform] || '프로그래머스';
   }
 
   // 탭 초기화
@@ -768,214 +834,289 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 플랫폼별 문제 렌더링
-  function renderAllPlatforms(progress) {
-    renderPlatformProblems('programmers', 'progDifficultyList', progress);
-    renderPlatformProblems('baekjoon', 'baekDifficultyList', progress);
-    renderBeginnerProblems(progress);
+  // ========== 문제 목록 렌더링 (lazy) ==========
+
+  // 문제 목록 초기 구성 - 헤더/그룹만 만들고 항목은 펼칠 때 lazy 렌더
+  function renderProblemLists() {
+    groups.length = 0;
+    renderProgrammersGroups();
+    registerBeginnerGroups();
+    refreshGroupCounters();
   }
 
-  function renderPlatformProblems(platform, containerId, progress) {
-    const container = document.getElementById(containerId);
+  // 프로그래머스 난이도 그룹 (difficulty >= 1: L1~L5, 레벨7)
+  function renderProgrammersGroups() {
+    const container = document.getElementById('progDifficultyList');
     container.innerHTML = '';
 
-    // 프로그래머스는 difficulty > 0인 문제만 (기초·입문 제외)
-    const platformProblems = PROBLEMS.filter(p =>
-      p.platform === platform && (platform !== 'programmers' || p.difficulty > 0)
-    );
+    const mainProblems = PROBLEMS.filter(p => p.difficulty >= 1);
 
     // 난이도별 그룹화
     const difficultyGroups = {};
-    platformProblems.forEach(p => {
+    mainProblems.forEach(p => {
       if (!difficultyGroups[p.difficulty]) {
         difficultyGroups[p.difficulty] = [];
       }
       difficultyGroups[p.difficulty].push(p);
     });
 
-    // 난이도 순서대로 정렬
+    // 난이도 순서대로 정렬 (1-5, 7)
     const sortedDifficulties = Object.keys(difficultyGroups)
       .map(Number)
-      .sort((a, b) => {
-        // 1-5, 7, 8 순서
-        if (a <= 5 && b <= 5) return a - b;
-        if (a <= 5) return -1;
-        if (b <= 5) return 1;
-        return a - b;
-      });
+      .sort((a, b) => a - b);
+
+    const frag = document.createDocumentFragment();
 
     sortedDifficulties.forEach(difficulty => {
       const problems = difficultyGroups[difficulty];
       const diffInfo = DIFFICULTY_INFO[difficulty];
 
-      const solvedCount = problems.filter(p => progress[p.id]?.completed).length;
-      const progressPercent = Math.round((solvedCount / problems.length) * 100);
-
       const groupDiv = document.createElement('div');
       groupDiv.className = 'difficulty-group';
-      groupDiv.innerHTML = `
-        <div class="difficulty-header" data-difficulty="${difficulty}">
-          <div class="difficulty-label">
-            <span class="difficulty-stars">${diffInfo.display}</span>
-            <span class="difficulty-name">${diffInfo.name} ${diffInfo.label}</span>
-          </div>
-          <div class="difficulty-stats">
-            <span class="difficulty-count">${solvedCount}/${problems.length}</span>
-            <div class="difficulty-progress">
-              <div class="difficulty-progress-fill" style="width: ${progressPercent}%"></div>
-            </div>
-            <span class="difficulty-arrow">▼</span>
-          </div>
+
+      const header = document.createElement('div');
+      header.className = 'difficulty-header';
+      header.innerHTML = `
+        <div class="difficulty-label">
+          <span class="difficulty-stars">${diffInfo.display}</span>
+          <span class="difficulty-name">${diffInfo.name} ${diffInfo.label}</span>
         </div>
-        <div class="problem-list" data-difficulty="${difficulty}">
-          ${problems.map(p => renderProblemItem(p, progress)).join('')}
+        <div class="difficulty-stats">
+          <span class="difficulty-count">0/${problems.length}</span>
+          <div class="difficulty-progress">
+            <div class="difficulty-progress-fill" style="width: 0%"></div>
+          </div>
+          <span class="difficulty-arrow">▼</span>
         </div>
       `;
 
-      container.appendChild(groupDiv);
+      const listEl = document.createElement('div');
+      listEl.className = 'problem-list';
+
+      groupDiv.appendChild(header);
+      groupDiv.appendChild(listEl);
+      frag.appendChild(groupDiv);
+
+      // 그룹 디스크립터 등록 (lazy 렌더용)
+      const group = {
+        problems,
+        listEl,
+        countEl: header.querySelector('.difficulty-count'),
+        fillEl: header.querySelector('.difficulty-progress-fill'),
+        total: problems.length,
+        rendered: false
+      };
+      groups.push(group);
+
+      // 헤더 클릭 → 접기/펼치기 + 최초 1회 lazy 렌더
+      header.addEventListener('click', () => toggleGroup(header, listEl, group));
     });
 
-    // 난이도 헤더 클릭 이벤트
-    container.querySelectorAll('.difficulty-header').forEach(header => {
-      header.addEventListener('click', () => {
-        const difficulty = header.dataset.difficulty;
-        const list = container.querySelector(`.problem-list[data-difficulty="${difficulty}"]`);
-
-        header.classList.toggle('expanded');
-        list.classList.toggle('show');
-      });
-    });
-
-    // 체크박스 및 링크 이벤트
-    container.querySelectorAll('.problem-check').forEach(check => {
-      check.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const problemId = parseInt(check.dataset.id);
-        const item = check.closest('.problem-item');
-        const isSolved = item.classList.contains('solved');
-
-        if (isSolved) {
-          delete progress[problemId];
-          item.classList.remove('solved');
-          check.textContent = '';
-        } else {
-          progress[problemId] = { completed: true, completedAt: new Date().toISOString() };
-          item.classList.add('solved');
-          check.textContent = '✓';
-        }
-
-        await chrome.storage.sync.set({ progress });
-        updateProgress(progress);
-        showNextProblem(progress);
-      });
-    });
-
-    container.querySelectorAll('.problem-title, .problem-go').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const problemId = parseInt(el.closest('.problem-item').querySelector('.problem-check').dataset.id);
-        const problem = PROBLEMS.find(p => p.id === problemId);
-        if (problem) {
-          chrome.tabs.create({ url: getProblemUrl(problem) });
-        }
-      });
-    });
+    // DocumentFragment 배치 삽입
+    container.appendChild(frag);
   }
 
-  function renderProblemItem(problem, progress) {
-    const isSolved = progress[problem.id]?.completed;
-    return `
-      <div class="problem-item ${isSolved ? 'solved' : ''}">
-        <div class="problem-check" data-id="${problem.id}">${isSolved ? '✓' : ''}</div>
-        <span class="problem-num">#${problem.id}</span>
-        <span class="problem-title">${problem.title}</span>
-        <span class="problem-go">→</span>
-      </div>
-    `;
-  }
-
-  // 기초·입문 탭 문제 렌더링
-  function renderBeginnerProblems(progress) {
-    // 코딩테스트 입문 (category === '코딩테스트입문')
-    const introProblems = PROBLEMS.filter(p => p.difficulty === 0 && p.category === '코딩테스트입문');
-    // 코딩 기초 트레이닝 (category === '코딩기초트레이닝')
-    const trainingProblems = PROBLEMS.filter(p => p.difficulty === 0 && p.category === '코딩기초트레이닝');
-
-    // 코딩테스트 입문 섹션 렌더링
-    const introContainer = document.getElementById('introProblems');
-    const introSolved = introProblems.filter(p => progress[p.id]?.completed).length;
-    const introProgressPercent = Math.round((introSolved / introProblems.length) * 100);
-
-    document.getElementById('introCount').textContent = `${introSolved}/${introProblems.length}`;
-    document.getElementById('introProgressFill').style.width = `${introProgressPercent}%`;
-    introContainer.innerHTML = introProblems.map(p => renderProblemItem(p, progress)).join('');
-
-    // 코딩 기초 트레이닝 섹션 렌더링
-    const trainingContainer = document.getElementById('trainingProblems');
-    const trainingSolved = trainingProblems.filter(p => progress[p.id]?.completed).length;
-    const trainingProgressPercent = Math.round((trainingSolved / trainingProblems.length) * 100);
-
-    document.getElementById('trainingCount').textContent = `${trainingSolved}/${trainingProblems.length}`;
-    document.getElementById('trainingProgressFill').style.width = `${trainingProgressPercent}%`;
-    trainingContainer.innerHTML = trainingProblems.map(p => renderProblemItem(p, progress)).join('');
-
-    // 기초·입문 탭 이벤트 바인딩
+  // 기초·입문 탭 그룹 등록 (HTML에 고정 컨테이너 존재 - lazy 렌더 연결)
+  function registerBeginnerGroups() {
     const beginnerTab = document.getElementById('tab-beginner');
 
-    // 헤더 클릭 이벤트 (접기/펼치기)
-    beginnerTab.querySelectorAll('.difficulty-header').forEach(header => {
-      header.addEventListener('click', () => {
-        const category = header.dataset.category;
-        const list = beginnerTab.querySelector(`#${category}Problems`);
+    const introProblems = PROBLEMS.filter(p => p.difficulty === 0 && p.category === '코딩테스트입문');
+    const trainingProblems = PROBLEMS.filter(p => p.difficulty === 0 && p.category === '코딩기초트레이닝');
 
-        header.classList.toggle('expanded');
-        list.classList.toggle('show');
-      });
+    const specs = [
+      { category: 'intro', problems: introProblems, listEl: document.getElementById('introProblems'), countEl: document.getElementById('introCount'), fillEl: document.getElementById('introProgressFill') },
+      { category: 'training', problems: trainingProblems, listEl: document.getElementById('trainingProblems'), countEl: document.getElementById('trainingCount'), fillEl: document.getElementById('trainingProgressFill') }
+    ];
+
+    specs.forEach(spec => {
+      spec.listEl.innerHTML = '';
+      const group = {
+        problems: spec.problems,
+        listEl: spec.listEl,
+        countEl: spec.countEl,
+        fillEl: spec.fillEl,
+        total: spec.problems.length,
+        rendered: false
+      };
+      groups.push(group);
+
+      const header = beginnerTab.querySelector(`.difficulty-header[data-category="${spec.category}"]`);
+      if (header) {
+        header.addEventListener('click', () => toggleGroup(header, spec.listEl, group));
+      }
+    });
+  }
+
+  // 접기/펼치기 + lazy 렌더
+  function toggleGroup(header, listEl, group) {
+    const expanded = header.classList.toggle('expanded');
+    listEl.classList.toggle('show');
+    if (expanded) {
+      lazyRenderGroup(group);
+    }
+  }
+
+  // 그룹 문제 항목을 최초 1회만 DOM에 삽입 (DocumentFragment 배치)
+  function lazyRenderGroup(group) {
+    if (group.rendered) return;
+
+    const frag = document.createDocumentFragment();
+    group.problems.forEach(problem => {
+      frag.appendChild(createProblemItemEl(problem));
+    });
+    group.listEl.appendChild(frag);
+    group.rendered = true;
+  }
+
+  // 문제 항목 DOM 생성 (개별 이벤트 포함)
+  function createProblemItemEl(problem) {
+    const item = document.createElement('div');
+    item.className = 'problem-item';
+    item.dataset.id = problem.id;
+
+    const check = document.createElement('div');
+    check.className = 'problem-check';
+    check.dataset.id = problem.id;
+
+    const num = document.createElement('span');
+    num.className = 'problem-num';
+    num.textContent = `#${problem.id}`;
+
+    const title = document.createElement('span');
+    title.className = 'problem-title';
+    title.textContent = problem.title;
+
+    // 푼 문제만 보이는 GitHub 바로가기 (저장소가 연결돼 있을 때)
+    const gh = createGitHubLinkEl(problem);
+
+    item.appendChild(check);
+    item.appendChild(num);
+    item.appendChild(title);
+    item.appendChild(gh);
+
+    // 생성 시점의 solved 상태 반영
+    applyItemSolvedState(item, check, !!progress[problem.id]?.completed);
+
+    // 체크박스 토글 - 해당 항목 + 카운터만 갱신 (전체 재렌더 X)
+    check.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await toggleProblem(problem, item, check);
     });
 
-    // 체크박스 및 링크 이벤트
-    beginnerTab.querySelectorAll('.problem-check').forEach(check => {
-      check.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const problemId = parseInt(check.dataset.id);
-        const item = check.closest('.problem-item');
-        const isSolved = item.classList.contains('solved');
+    // 문제 페이지 열기 (행 어디를 눌러도 — 체크박스와 GitHub 버튼은 위에서 stopPropagation)
+    const openProblem = (e) => {
+      e.stopPropagation();
+      chrome.tabs.create({ url: getProblemUrl(problem) });
+    };
+    item.addEventListener('click', openProblem);
 
-        if (isSolved) {
-          delete progress[problemId];
-          item.classList.remove('solved');
-          check.textContent = '';
-        } else {
-          progress[problemId] = { completed: true, completedAt: new Date().toISOString() };
-          item.classList.add('solved');
-          check.textContent = '✓';
-        }
+    return item;
+  }
 
-        await chrome.storage.sync.set({ progress });
-        updateProgress(progress);
-        showNextProblem(progress);
+  // 문제 풀이 파일의 GitHub URL.
+  // ref 로 HEAD 를 쓴다 — 학생 저장소의 기본 브랜치가 main 이든 master 이든 GitHub 가 알아서 해석한다.
+  function getGitHubFileUrl(problem) {
+    if (!currentRepo) return null;
+    const encodedPath = getGitHubPath(problem).split('/').map(encodeURIComponent).join('/');
+    return `https://github.com/${currentRepo}/blob/HEAD/${encodedPath}`;
+  }
 
-        // 진행률 UI 업데이트 (기초·입문 탭 내)
-        const introSolvedNow = PROBLEMS.filter(p => p.difficulty === 0 && p.category === '코딩테스트입문' && progress[p.id]?.completed).length;
-        const trainingSolvedNow = PROBLEMS.filter(p => p.difficulty === 0 && p.category === '코딩기초트레이닝' && progress[p.id]?.completed).length;
+  function createGitHubLinkEl(problem) {
+    const gh = document.createElement('button');
+    gh.type = 'button';
+    gh.className = 'problem-github';
+    gh.title = 'GitHub에서 내 풀이 코드 보기';
+    gh.setAttribute('aria-label', `${problem.title} 풀이 코드를 GitHub에서 보기`);
 
-        document.getElementById('introCount').textContent = `${introSolvedNow}/100`;
-        document.getElementById('introProgressFill').style.width = `${introSolvedNow}%`;
-        document.getElementById('trainingCount').textContent = `${trainingSolvedNow}/123`;
-        document.getElementById('trainingProgressFill').style.width = `${Math.round((trainingSolvedNow / 123) * 100)}%`;
-      });
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('width', '15');
+    svg.setAttribute('height', '15');
+    svg.setAttribute('aria-hidden', 'true');
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('fill', 'currentColor');
+    p.setAttribute('d', 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z');
+    svg.appendChild(p);
+    gh.appendChild(svg);
+
+    gh.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const url = getGitHubFileUrl(problem);
+      if (!url) {
+        showToast('먼저 GitHub 저장소를 연결해주세요', 'error');
+        return;
+      }
+      chrome.tabs.create({ url });
     });
 
-    beginnerTab.querySelectorAll('.problem-title, .problem-go').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const problemId = parseInt(el.closest('.problem-item').querySelector('.problem-check').dataset.id);
-        const problem = PROBLEMS.find(p => p.id === problemId);
-        if (problem) {
-          chrome.tabs.create({ url: getProblemUrl(problem) });
-        }
-      });
+    return gh;
+  }
+
+  // 저장소 연결 상태가 바뀌면 이미 그려진 항목들의 버튼 노출을 갱신한다
+  function refreshGitHubLinks() {
+    document.body.classList.toggle('has-repo', !!currentRepo);
+  }
+
+  // 개별 항목의 solved 표시 상태 적용
+  function applyItemSolvedState(item, check, solved) {
+    if (solved) {
+      item.classList.add('solved');
+      check.textContent = '✓';
+    } else {
+      item.classList.remove('solved');
+      check.textContent = '';
+    }
+  }
+
+  // 개별 문제 토글 (체크박스) - 전체 재렌더 없이 항목/카운터만 갱신
+  async function toggleProblem(problem, item, check) {
+    const solved = item.classList.contains('solved');
+
+    if (solved) {
+      delete progress[problem.id];
+      applyItemSolvedState(item, check, false);
+    } else {
+      progress[problem.id] = { completed: true, completedAt: new Date().toISOString() };
+      applyItemSolvedState(item, check, true);
+    }
+
+    await chrome.storage.sync.set({ progress });
+    updateProgress(progress);
+    showNextProblem(progress);
+    refreshGroupCounters();
+  }
+
+  // 그룹별 카운트/진행바만 갱신 (문제 항목은 재생성하지 않음)
+  function refreshGroupCounters() {
+    groups.forEach(group => {
+      const solved = group.problems.reduce(
+        (n, p) => n + (progress[p.id]?.completed ? 1 : 0),
+        0
+      );
+      if (group.countEl) group.countEl.textContent = `${solved}/${group.total}`;
+      if (group.fillEl) {
+        const percent = group.total ? Math.round((solved / group.total) * 100) : 0;
+        group.fillEl.style.width = `${percent}%`;
+      }
     });
+  }
+
+  // 이미 렌더된(펼쳐진) 항목의 체크 상태를 progress에 맞춰 재동기화
+  function refreshRenderedItems() {
+    document.querySelectorAll('.problem-item').forEach(item => {
+      const check = item.querySelector('.problem-check');
+      if (!check) return;
+      applyItemSolvedState(item, check, !!progress[item.dataset.id]?.completed);
+    });
+  }
+
+  // 외부/내부 진행률 변경을 UI에 반영 (전체 재렌더 없이 카운터/항목만 갱신)
+  function reconcileProgress(newProgress) {
+    progress = newProgress || {};
+    updateProgress(progress);
+    showNextProblem(progress);
+    refreshRenderedItems();
+    refreshGroupCounters();
   }
 
   // 토스트 메시지 (타입별 스타일 지원)

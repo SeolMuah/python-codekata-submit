@@ -3,25 +3,78 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SPARTA Python 코드카타</title>
+  <title>Python 알고리즘</title>
   <style>
+    :root {
+      --primary:        #0ea5e9;   /* 주요 강조: 버튼, 체크, 진행바 */
+      --primary-strong: #0284c7;   /* 그라데이션 어두운 쪽 */
+      --primary-soft:   #38bdf8;   /* 링크, 호버, 수치 */
+      --primary-faint:  #7dd3fc;   /* 아주 밝은 강조 */
+
+      --bg-start:  #08111c;
+      --bg-end:    #0d1826;
+      --surface:   #101b2b;        /* 카드 */
+      --surface-2: #16243a;        /* 카드 위 요소 */
+
+      --header-start: #0c4a6e;
+      --header-end:   #0369a1;
+
+      --border:        rgba(56, 189, 248, 0.14);
+      --border-strong: rgba(56, 189, 248, 0.28);
+      --hover:         rgba(56, 189, 248, 0.08);
+
+      --text:      #e2e8f0;
+      --text-dim:  #94a3b8;
+      --text-mute: #64748b;
+
+      --danger:        #ef4444;
+      --danger-strong: #dc2626;
+
+      /* "추천" 강조 (블루 배경과 조화되도록 채도 약간 낮춘 앰버) */
+      --accent:        #f0b429;
+      --accent-strong: #e08a12;
+      --accent-soft:   #fcd34d;
+      --accent-pale:   #fef3c7;
+
+      --radius-sm: 8px;
+      --radius:    10px;
+      --radius-lg: 12px;
+
+      --speed: 0.15s;
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body { height: 100%; }
 
     body {
       font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      width: 420px;
-      background: linear-gradient(180deg, #0a1628 0%, #0d1b2a 100%);
-      color: #e2e8f0;
-      min-height: 520px;
+      width: 100%;
+      min-width: 320px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(180deg, var(--bg-start) 0%, var(--bg-end) 100%);
+      color: var(--text);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--primary-soft);
+      outline-offset: 2px;
+      border-radius: 4px;
     }
 
     .header {
-      background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%);
+      flex-shrink: 0;
+      background: linear-gradient(135deg, var(--header-start) 0%, var(--header-end) 100%);
       padding: 14px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid rgba(74, 222, 128, 0.3);
+      border-bottom: 1px solid var(--border-strong);
+      box-shadow: 0 1px 12px rgba(3, 105, 161, 0.35);
     }
     .header-left {
       display: flex;
@@ -31,25 +84,40 @@
     .header-icon {
       width: 28px;
       height: 28px;
-      border-radius: 6px;
+      border-radius: 8px;
     }
     .header h1 {
       font-size: 15px;
       font-weight: 700;
-      background: linear-gradient(135deg, #4ade80, #86efac);
+      letter-spacing: -0.01em;
+      background: linear-gradient(135deg, var(--primary-soft), var(--primary-faint));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
     .header-stats {
       font-size: 12px;
-      color: #4ade80;
+      color: var(--primary-faint);
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
       padding: 4px 10px;
-      background: rgba(74, 222, 128, 0.15);
-      border-radius: 12px;
+      background: rgba(56, 189, 248, 0.15);
+      border-radius: 999px;
+      border: 1px solid var(--border);
     }
 
-    .container { padding: 12px; }
+    .container {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 12px;
+    }
+    .container::-webkit-scrollbar { width: 8px; }
+    .container::-webkit-scrollbar-track { background: transparent; }
+    .container::-webkit-scrollbar-thumb {
+      background: var(--border-strong);
+      border-radius: 8px;
+    }
+    .container::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.42); }
 
     /* 탭 네비게이션 */
     .tab-nav {
@@ -58,34 +126,36 @@
       margin-bottom: 12px;
       background: rgba(0,0,0,0.4);
       padding: 4px;
-      border-radius: 10px;
-      border: 1px solid rgba(74, 222, 128, 0.1);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
     }
     .tab-btn {
       flex: 1;
+      min-width: 0;
       padding: 8px 6px;
       border: none;
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       background: transparent;
-      color: #64748b;
+      color: var(--text-mute);
       font-size: 11px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: background var(--speed) ease, color var(--speed) ease, box-shadow var(--speed) ease;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 2px;
     }
-    .tab-btn:hover { background: rgba(74, 222, 128, 0.1); color: #4ade80; }
+    .tab-btn:hover { background: var(--hover); color: var(--primary-soft); }
     .tab-btn.active {
-      background: linear-gradient(135deg, #16a34a, #22c55e);
+      background: linear-gradient(135deg, var(--primary-strong), var(--primary));
       color: white;
-      box-shadow: 0 2px 10px rgba(74, 222, 128, 0.4);
+      box-shadow: 0 2px 8px rgba(14, 165, 233, 0.3);
     }
     .tab-btn .tab-count {
       font-size: 9px;
       opacity: 0.7;
+      font-variant-numeric: tabular-nums;
     }
     .tab-btn.active .tab-count { opacity: 1; }
 
@@ -95,16 +165,17 @@
 
     /* 섹션 스타일 */
     .section {
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(74, 222, 128, 0.15);
-      border-radius: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
       padding: 14px;
       margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
     }
     .section-title {
       font-size: 11px;
       font-weight: 700;
-      color: #4ade80;
+      color: var(--primary-soft);
       margin-bottom: 10px;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -116,7 +187,7 @@
       content: '';
       width: 3px;
       height: 10px;
-      background: linear-gradient(180deg, #16a34a, #4ade80);
+      background: linear-gradient(180deg, var(--primary-strong), var(--primary-soft));
       border-radius: 2px;
     }
 
@@ -128,58 +199,65 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 12px;
-      background: rgba(0,0,0,0.3);
-      border-radius: 8px;
+      gap: 10px;
+      padding: 11px 12px;
+      background: var(--surface);
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      transition: all 0.2s;
-      border: 1px solid transparent;
+      transition: background var(--speed) ease, border-color var(--speed) ease;
+      border: 1px solid var(--border);
     }
     .difficulty-header:hover {
-      background: rgba(74, 222, 128, 0.1);
-      border-color: rgba(74, 222, 128, 0.2);
+      background: var(--hover);
+      border-color: var(--border-strong);
     }
     .difficulty-header.expanded {
-      background: rgba(74, 222, 128, 0.15);
-      border-radius: 8px 8px 0 0;
-      border-color: rgba(74, 222, 128, 0.2);
+      background: rgba(56, 189, 248, 0.12);
+      border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+      border-color: var(--border-strong);
       border-bottom: none;
     }
     .difficulty-label {
       display: flex;
       align-items: center;
       gap: 8px;
+      min-width: 0;
     }
-    .difficulty-stars { font-size: 12px; }
+    .difficulty-stars { font-size: 12px; flex-shrink: 0; }
     .difficulty-name {
-      font-size: 11px;
-      color: #94a3b8;
+      font-size: 12px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .difficulty-stats {
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-shrink: 0;
     }
     .difficulty-count {
       font-size: 11px;
-      color: #64748b;
+      color: var(--text-mute);
+      font-variant-numeric: tabular-nums;
     }
     .difficulty-progress {
       width: 40px;
       height: 4px;
-      background: rgba(74, 222, 128, 0.15);
+      background: rgba(56, 189, 248, 0.15);
       border-radius: 2px;
       overflow: hidden;
     }
     .difficulty-progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, #22c55e, #4ade80);
+      background: linear-gradient(90deg, var(--primary), var(--primary-soft));
       border-radius: 2px;
-      transition: width 0.3s;
+      transition: width 0.3s ease;
     }
     .difficulty-arrow {
-      color: #64748b;
-      transition: transform 0.2s;
+      color: var(--text-mute);
+      transition: transform var(--speed) ease;
       font-size: 10px;
     }
     .difficulty-header.expanded .difficulty-arrow {
@@ -189,85 +267,109 @@
     /* 문제 목록 */
     .problem-list {
       display: none;
-      background: rgba(0,0,0,0.25);
-      border-radius: 0 0 8px 8px;
-      max-height: 200px;
+      background: rgba(0,0,0,0.22);
+      border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+      max-height: 480px;
       overflow-y: auto;
-      border: 1px solid rgba(74, 222, 128, 0.2);
+      border: 1px solid var(--border-strong);
       border-top: none;
     }
     .problem-list.show { display: block; }
-    .problem-list::-webkit-scrollbar { width: 4px; }
+    .problem-list::-webkit-scrollbar { width: 6px; }
     .problem-list::-webkit-scrollbar-track { background: transparent; }
-    .problem-list::-webkit-scrollbar-thumb { background: rgba(74, 222, 128, 0.3); border-radius: 2px; }
+    .problem-list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
+    .problem-list::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.42); }
 
     .problem-item {
       display: flex;
       align-items: center;
-      padding: 10px 12px;
-      border-bottom: 1px solid rgba(74, 222, 128, 0.1);
-      transition: all 0.15s;
+      gap: 8px;
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--border);
+      transition: background var(--speed) ease;
+      cursor: pointer;
     }
-    .problem-item:hover { background: rgba(74, 222, 128, 0.08); }
+    .problem-item:hover { background: var(--hover); }
     .problem-item:last-child { border-bottom: none; }
-    .problem-item.solved { opacity: 0.6; }
-    .problem-item.solved .problem-title { text-decoration: line-through; color: #94a3b8; }
+    /* 푼 문제는 번호·제목만 흐리게. GitHub 버튼까지 흐려지면 안 된다 */
+    .problem-item.solved .problem-num { opacity: 0.55; }
+    .problem-item.solved .problem-title { text-decoration: line-through; color: var(--text-dim); opacity: 0.7; }
 
     .problem-check {
       width: 18px;
       height: 18px;
-      border-radius: 5px;
-      border: 2px solid rgba(74, 222, 128, 0.3);
-      margin-right: 10px;
+      border-radius: 6px;
+      border: 2px solid var(--border-strong);
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 10px;
       flex-shrink: 0;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: border-color var(--speed) ease, background var(--speed) ease, transform var(--speed) ease;
     }
     .problem-check:hover {
-      border-color: #22c55e;
-      background: rgba(74, 222, 128, 0.2);
+      border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.2);
       transform: scale(1.1);
     }
     .problem-item.solved .problem-check {
-      background: linear-gradient(135deg, #22c55e, #16a34a);
+      background: linear-gradient(135deg, var(--primary), var(--primary-strong));
       border-color: transparent;
       color: white;
     }
     .problem-item.solved .problem-check:hover {
-      background: linear-gradient(135deg, #ef4444, #dc2626);
+      background: linear-gradient(135deg, var(--danger), var(--danger-strong));
       transform: scale(1.1);
     }
+    /* 번호는 우측 정렬 + 고정폭 숫자 → #1 과 #393 이 섞여도 제목 시작선이 한 줄로 맞는다 */
     .problem-num {
-      font-size: 10px;
-      color: #64748b;
-      width: 24px;
+      font-size: 11px;
+      color: var(--text-mute);
+      min-width: 34px;
       flex-shrink: 0;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
     }
     .problem-title {
-      font-size: 12px;
-      color: #e2e8f0;
       flex: 1;
+      min-width: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       cursor: pointer;
       padding: 2px 0;
     }
-    .problem-title:hover { color: #4ade80; }
-    .problem-go {
-      font-size: 12px;
-      color: #4ade80;
-      opacity: 0;
-      transition: all 0.15s;
+    .problem-item:hover .problem-title { color: var(--primary-soft); }
+
+    /* GitHub 바로가기 — 저장소가 연결되고(body.has-repo) 푼 문제(.solved)일 때만 보인다 */
+    .problem-github {
+      display: none;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-mute);
       cursor: pointer;
-      padding: 4px;
+      opacity: 0;
+      transition: opacity var(--speed) ease, color var(--speed) ease,
+                  border-color var(--speed) ease, background var(--speed) ease;
     }
-    .problem-item:hover .problem-go { opacity: 1; }
-    .problem-go:hover { color: #86efac; transform: translateX(2px); }
+    body.has-repo .problem-item.solved .problem-github { display: flex; opacity: 0.55; }
+    body.has-repo .problem-item.solved:hover .problem-github { opacity: 1; }
+    .problem-github:hover {
+      color: var(--primary-faint);
+      border-color: var(--border-strong);
+      background: var(--hover);
+    }
 
     /* 프로필 섹션 */
     .profile-section {
@@ -277,61 +379,66 @@
     }
     .profile-input {
       flex: 1;
+      min-width: 0;
       padding: 10px 12px;
       background: rgba(0,0,0,0.4);
-      border: 1px solid rgba(74, 222, 128, 0.2);
-      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
       font-size: 13px;
-      color: #e2e8f0;
+      color: var(--text);
+      transition: border-color var(--speed) ease, box-shadow var(--speed) ease;
     }
-    .profile-input:focus { outline: none; border-color: #22c55e; box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2); }
+    .profile-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2); }
     .profile-btn {
       padding: 10px 16px;
-      background: linear-gradient(135deg, #16a34a, #22c55e);
+      background: linear-gradient(135deg, var(--primary-strong), var(--primary));
       border: none;
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       color: white;
       font-weight: 600;
       font-size: 12px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: transform var(--speed) ease, box-shadow var(--speed) ease;
     }
     .profile-btn:hover {
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(74, 222, 128, 0.4);
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
     }
+    .profile-btn:active { transform: translateY(0); }
     .profile-display {
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 10px 14px;
-      background: rgba(74, 222, 128, 0.1);
-      border: 1px solid rgba(74, 222, 128, 0.25);
-      border-radius: 10px;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
     }
     .profile-dot {
       width: 8px;
       height: 8px;
-      background: #4ade80;
+      background: var(--primary-soft);
       border-radius: 50%;
-      box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+      box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+      flex-shrink: 0;
     }
-    .profile-name { font-size: 13px; font-weight: 600; flex: 1; color: #86efac; }
+    .profile-name { font-size: 13px; font-weight: 600; flex: 1; min-width: 0; color: var(--primary-faint); }
     .profile-change {
       font-size: 11px;
-      color: #22c55e;
+      color: var(--primary);
       cursor: pointer;
+      flex-shrink: 0;
     }
-    .profile-change:hover { color: #4ade80; }
+    .profile-change:hover { color: var(--primary-soft); }
 
     /* 다음 문제 추천 */
     .next-problem {
-      background: linear-gradient(135deg, rgba(251,191,36,0.15), rgba(245,158,11,0.1));
-      border: 1px solid rgba(251,191,36,0.3);
-      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(240, 180, 41, 0.14), rgba(224, 138, 18, 0.08));
+      border: 1px solid rgba(240, 180, 41, 0.28);
+      border-radius: var(--radius);
       padding: 12px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: transform var(--speed) ease, box-shadow var(--speed) ease;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -339,31 +446,36 @@
     }
     .next-problem:hover {
       transform: translateY(-2px);
-      box-shadow: 0 4px 15px rgba(251,191,36,0.2);
+      box-shadow: 0 4px 14px rgba(240, 180, 41, 0.18);
     }
     .next-badge {
       padding: 4px 8px;
-      background: rgba(251,191,36,0.2);
-      border-radius: 6px;
+      background: rgba(240, 180, 41, 0.2);
+      border-radius: var(--radius-sm);
       font-size: 9px;
       font-weight: 700;
-      color: #fbbf24;
+      color: var(--accent);
       text-transform: uppercase;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
     }
-    .next-info { flex: 1; }
+    .next-info { flex: 1; min-width: 0; }
     .next-title {
       font-size: 13px;
       font-weight: 600;
-      color: #fef3c7;
+      color: var(--accent-pale);
       margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .next-meta {
       font-size: 10px;
-      color: #fcd34d;
+      color: var(--accent-soft);
       display: flex;
       gap: 8px;
     }
-    .next-arrow { color: #fbbf24; font-size: 16px; }
+    .next-arrow { color: var(--accent); font-size: 16px; flex-shrink: 0; }
 
     /* 진행률 요약 */
     .progress-summary {
@@ -373,22 +485,25 @@
     }
     .progress-card {
       flex: 1;
+      min-width: 0;
       text-align: center;
       padding: 10px 6px;
-      background: rgba(0,0,0,0.3);
-      border-radius: 10px;
-      border: 1px solid rgba(74, 222, 128, 0.1);
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     }
     .progress-value {
       font-size: 16px;
       font-weight: 800;
-      background: linear-gradient(135deg, #4ade80, #86efac);
+      font-variant-numeric: tabular-nums;
+      background: linear-gradient(135deg, var(--primary-soft), var(--primary-faint));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
     .progress-label {
       font-size: 8px;
-      color: #64748b;
+      color: var(--text-mute);
       margin-top: 3px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -396,16 +511,16 @@
 
     /* 완료 상태 */
     .complete-card {
-      background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(16,185,129,0.1));
-      border: 1px solid rgba(34,197,94,0.3);
-      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(2, 132, 199, 0.1));
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
       padding: 20px;
       text-align: center;
       margin-bottom: 12px;
     }
     .complete-icon { font-size: 36px; margin-bottom: 8px; }
-    .complete-title { font-size: 16px; font-weight: 700; color: #86efac; }
-    .complete-desc { font-size: 12px; color: #6ee7b7; margin-top: 4px; }
+    .complete-title { font-size: 16px; font-weight: 700; color: var(--primary-faint); }
+    .complete-desc { font-size: 12px; color: var(--primary-soft); margin-top: 4px; }
 
     /* 설정 탭 */
     .setting-group {
@@ -413,51 +528,65 @@
     }
     .setting-label {
       font-size: 11px;
-      color: #94a3b8;
+      color: var(--text-dim);
       margin-bottom: 6px;
     }
     .setting-input {
       width: 100%;
       padding: 10px 12px;
       background: rgba(0,0,0,0.4);
-      border: 1px solid rgba(74, 222, 128, 0.2);
-      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
       font-size: 12px;
-      color: #e2e8f0;
+      color: var(--text);
+      transition: border-color var(--speed) ease, box-shadow var(--speed) ease;
     }
-    .setting-input:focus { outline: none; border-color: #22c55e; box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2); }
+    .setting-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2); }
     .setting-btn {
       width: 100%;
       padding: 10px;
-      background: linear-gradient(135deg, #16a34a, #22c55e);
+      background: linear-gradient(135deg, var(--primary-strong), var(--primary));
       border: none;
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       color: white;
       font-weight: 600;
       font-size: 12px;
       cursor: pointer;
       margin-top: 8px;
-      transition: all 0.2s;
+      transition: transform var(--speed) ease, box-shadow var(--speed) ease;
     }
     .setting-btn:hover {
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(74, 222, 128, 0.4);
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
     }
+    .setting-btn:active { transform: translateY(0); }
     .setting-status {
       font-size: 11px;
-      color: #64748b;
+      color: var(--text-mute);
       margin-top: 6px;
     }
-    .setting-status.success { color: #4ade80; }
-    .setting-status.error { color: #ef4444; }
+    .setting-status.success { color: var(--primary-soft); }
+    .setting-status.error { color: var(--danger); }
 
     .footer {
+      flex-shrink: 0;
       text-align: center;
-      padding: 12px;
+      padding: 10px 12px 12px;
       font-size: 10px;
-      color: #64748b;
-      border-top: 1px solid rgba(74, 222, 128, 0.1);
-      background: rgba(0,0,0,0.2);
+      color: var(--text-mute);
+      border-top: 1px solid var(--border);
+      background: rgba(0,0,0,0.25);
+    }
+    .footer-line + .footer-line { margin-top: 4px; }
+    .footer-link {
+      color: var(--primary-soft);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: color var(--speed) ease, border-color var(--speed) ease;
+    }
+    .footer-link:hover {
+      color: var(--primary-faint);
+      border-bottom-color: currentColor;
     }
 
     /* GitHub 연결 상태 */
@@ -466,43 +595,45 @@
       align-items: center;
       gap: 10px;
       padding: 10px 12px;
-      background: rgba(34,197,94,0.1);
-      border: 1px solid rgba(34,197,94,0.2);
-      border-radius: 8px;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
     }
     .github-connected-dot {
       width: 8px;
       height: 8px;
-      background: #22c55e;
+      background: var(--primary);
       border-radius: 50%;
       flex-shrink: 0;
     }
     .github-connected-info {
       flex: 1;
+      min-width: 0;
     }
     .github-connected-title {
       font-size: 12px;
       font-weight: 600;
-      color: #86efac;
+      color: var(--primary-faint);
     }
     .github-connected-detail {
       font-size: 10px;
-      color: #6ee7b7;
+      color: var(--primary-soft);
       margin-top: 2px;
     }
     .github-change-btn {
       padding: 4px 10px;
       background: transparent;
-      border: 1px solid rgba(34,197,94,0.3);
-      border-radius: 6px;
-      color: #6ee7b7;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--primary-soft);
       font-size: 10px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: background var(--speed) ease, border-color var(--speed) ease;
+      flex-shrink: 0;
     }
     .github-change-btn:hover {
-      background: rgba(34,197,94,0.1);
-      border-color: rgba(34,197,94,0.5);
+      background: var(--hover);
+      border-color: rgba(56, 189, 248, 0.5);
     }
 
     /* GitHub OAuth 로그인 */
@@ -511,7 +642,7 @@
       padding: 12px 16px;
       background: #24292f;
       border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       color: white;
       font-weight: 600;
       font-size: 13px;
@@ -520,7 +651,7 @@
       align-items: center;
       justify-content: center;
       gap: 10px;
-      transition: all 0.2s;
+      transition: background var(--speed) ease, transform var(--speed) ease, box-shadow var(--speed) ease;
     }
     .github-login-btn:hover {
       background: #32383f;
@@ -543,12 +674,12 @@
       text-align: center;
       padding: 16px;
       background: rgba(0,0,0,0.3);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       margin-top: 12px;
     }
     .device-code-label {
       font-size: 11px;
-      color: #94a3b8;
+      color: var(--text-dim);
       margin-bottom: 10px;
     }
     .device-code-wrapper {
@@ -562,56 +693,56 @@
       font-family: 'Consolas', 'Monaco', monospace;
       font-size: 24px;
       font-weight: 700;
-      color: #4ade80;
+      color: var(--primary-soft);
       letter-spacing: 4px;
       padding: 12px 16px;
       background: rgba(0,0,0,0.4);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       margin-bottom: 0;
     }
     .copy-code-btn {
-      background: rgba(74, 222, 128, 0.2);
-      border: 1px solid rgba(74, 222, 128, 0.3);
-      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.18);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
       padding: 10px;
       cursor: pointer;
-      color: #4ade80;
-      transition: all 0.2s;
+      color: var(--primary-soft);
+      transition: background var(--speed) ease, transform var(--speed) ease;
     }
     .copy-code-btn:hover {
-      background: rgba(74, 222, 128, 0.3);
+      background: rgba(56, 189, 248, 0.3);
       transform: scale(1.05);
     }
     .device-code-copied {
-      color: #4ade80;
+      color: var(--primary-soft);
       font-size: 12px;
       font-weight: 600;
       margin-bottom: 8px;
     }
     .device-code-info {
       font-size: 11px;
-      color: #94a3b8;
+      color: var(--text-dim);
       margin-bottom: 12px;
       line-height: 1.5;
     }
     .device-code-link {
       display: inline-block;
       padding: 8px 16px;
-      background: linear-gradient(135deg, #16a34a, #22c55e);
+      background: linear-gradient(135deg, var(--primary-strong), var(--primary));
       color: white;
       text-decoration: none;
-      border-radius: 6px;
+      border-radius: var(--radius-sm);
       font-size: 12px;
       font-weight: 600;
-      transition: all 0.2s;
+      transition: transform var(--speed) ease, box-shadow var(--speed) ease;
     }
     .device-code-link:hover {
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(74, 222, 128, 0.4);
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
     }
     .device-code-status {
       font-size: 11px;
-      color: #64748b;
+      color: var(--text-mute);
       margin-top: 12px;
       display: flex;
       align-items: center;
@@ -621,13 +752,19 @@
     .device-code-spinner {
       width: 12px;
       height: 12px;
-      border: 2px solid rgba(74, 222, 128, 0.2);
-      border-top-color: #4ade80;
+      border: 2px solid rgba(56, 189, 248, 0.2);
+      border-top-color: var(--primary-soft);
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+    .device-countdown {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 11px;
+      color: var(--primary-soft);
+      font-weight: 600;
     }
 
     /* 로그인된 사용자 정보 */
@@ -636,43 +773,46 @@
       align-items: center;
       gap: 12px;
       padding: 12px;
-      background: rgba(34,197,94,0.1);
-      border: 1px solid rgba(34,197,94,0.2);
-      border-radius: 10px;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
       cursor: pointer;
-      transition: all 0.2s;
+      transition: background var(--speed) ease, border-color var(--speed) ease;
     }
     .user-profile:hover {
-      background: rgba(34,197,94,0.15);
-      border-color: rgba(34,197,94,0.3);
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.4);
     }
     .user-avatar {
       width: 40px;
       height: 40px;
       border-radius: 50%;
-      border: 2px solid rgba(74, 222, 128, 0.3);
+      border: 2px solid var(--border-strong);
+      flex-shrink: 0;
     }
     .user-info {
       flex: 1;
+      min-width: 0;
     }
     .user-name {
       font-size: 13px;
       font-weight: 600;
-      color: #86efac;
+      color: var(--primary-faint);
     }
     .user-login {
       font-size: 11px;
-      color: #6ee7b7;
+      color: var(--primary-soft);
     }
     .logout-btn {
       padding: 6px 12px;
       background: transparent;
       border: 1px solid rgba(239, 68, 68, 0.3);
-      border-radius: 6px;
+      border-radius: var(--radius-sm);
       color: #f87171;
       font-size: 11px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: background var(--speed) ease, border-color var(--speed) ease;
+      flex-shrink: 0;
     }
     .logout-btn:hover {
       background: rgba(239, 68, 68, 0.1);
@@ -685,42 +825,55 @@
     }
     .repo-selector-label {
       font-size: 11px;
-      color: #94a3b8;
+      color: var(--text-dim);
       margin-bottom: 6px;
     }
     .repo-select {
       width: 100%;
       padding: 10px 12px;
       background: rgba(0,0,0,0.4);
-      border: 1px solid rgba(74, 222, 128, 0.2);
-      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
       font-size: 12px;
-      color: #e2e8f0;
+      color: var(--text);
       cursor: pointer;
+      transition: border-color var(--speed) ease;
     }
     .repo-select:focus {
       outline: none;
-      border-color: #22c55e;
+      border-color: var(--primary);
     }
     .repo-select option {
-      background: #1a1a2e;
-      color: #e2e8f0;
+      background: var(--surface);
+      color: var(--text);
     }
     .create-repo-btn {
       width: 100%;
       padding: 10px;
       background: transparent;
-      border: 1px dashed rgba(74, 222, 128, 0.3);
-      border-radius: 8px;
-      color: #4ade80;
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--primary-soft);
       font-size: 12px;
       cursor: pointer;
       margin-top: 8px;
-      transition: all 0.2s;
+      transition: background var(--speed) ease, border-color var(--speed) ease;
     }
     .create-repo-btn:hover {
-      background: rgba(74, 222, 128, 0.1);
-      border-color: rgba(74, 222, 128, 0.5);
+      background: var(--hover);
+      border-color: rgba(56, 189, 248, 0.5);
+    }
+    /* 저장소 미선택 시 강조 (primary) */
+    .create-repo-btn.primary {
+      background: linear-gradient(135deg, var(--primary-strong), var(--primary));
+      border: 1px solid transparent;
+      color: white;
+      font-weight: 700;
+      box-shadow: 0 2px 10px rgba(14, 165, 233, 0.3);
+    }
+    .create-repo-btn.primary:hover {
+      background: linear-gradient(135deg, var(--primary-strong), var(--primary-strong));
+      border-color: transparent;
     }
 
     /* 토글 스위치 */
@@ -728,29 +881,32 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 12px;
       padding: 12px;
       background: rgba(0,0,0,0.2);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       margin-bottom: 8px;
     }
     .toggle-label {
       display: flex;
       flex-direction: column;
       gap: 2px;
+      min-width: 0;
     }
     .toggle-title {
       font-size: 12px;
       font-weight: 500;
-      color: #e2e8f0;
+      color: var(--text);
     }
     .toggle-desc {
       font-size: 10px;
-      color: #64748b;
+      color: var(--text-mute);
     }
     .toggle-switch {
       position: relative;
       width: 44px;
       height: 24px;
+      flex-shrink: 0;
     }
     .toggle-switch input {
       opacity: 0;
@@ -766,7 +922,7 @@
       bottom: 0;
       background: rgba(100, 116, 139, 0.5);
       border-radius: 24px;
-      transition: all 0.3s;
+      transition: background 0.18s ease;
     }
     .toggle-slider:before {
       position: absolute;
@@ -777,10 +933,10 @@
       bottom: 3px;
       background: white;
       border-radius: 50%;
-      transition: all 0.3s;
+      transition: transform 0.18s ease;
     }
     .toggle-switch input:checked + .toggle-slider {
-      background: linear-gradient(135deg, #16a34a, #22c55e);
+      background: linear-gradient(135deg, var(--primary-strong), var(--primary));
     }
     .toggle-switch input:checked + .toggle-slider:before {
       transform: translateX(20px);
@@ -788,15 +944,25 @@
 
     /* 숨김 */
     .hidden { display: none !important; }
+
+    /* 접근성: 모션 최소화 선호 시 애니메이션 제거 */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="header-left">
-      <img src="icons/icon.png" alt="SPARTA" class="header-icon">
-      <h1>Python 코드카타</h1>
+      <img src="icons/icon128.png" alt="Python 알고리즘" class="header-icon">
+      <h1>Python 알고리즘</h1>
     </div>
-    <div class="header-stats" id="headerStats">0/431</div>
+    <div class="header-stats" id="headerStats">0/393</div>
   </div>
 
   <div class="container">
@@ -826,7 +992,7 @@
         </button>
         <!-- Device Code 표시 -->
         <div id="deviceCodeSection" class="device-code-section hidden">
-          <div class="device-code-label">아래 코드를 GitHub에 입력하세요</div>
+          <div class="device-code-label">GitHub 인증 코드 (자동 입력됩니다)</div>
           <div class="device-code-wrapper">
             <div class="device-code" id="userCode">XXXX-XXXX</div>
             <button class="copy-code-btn" id="copyCodeBtn" title="코드 복사">
@@ -837,8 +1003,9 @@
           </div>
           <div class="device-code-copied hidden" id="codeCopiedMsg">복사됨!</div>
           <div class="device-code-info">
-            새 탭에서 GitHub 인증 페이지가 열렸습니다.<br>
-            위 코드를 붙여넣기(Ctrl+V) 하세요.
+            코드는 자동 입력됩니다.<br>
+            GitHub 화면에서 <b>Authorize</b>만 눌러주세요.<br>
+            <span style="opacity: 0.7;">자동 입력이 안 되면 위 코드를 붙여넣어 주세요.</span>
           </div>
           <a href="https://github.com/login/device" target="_blank" class="device-code-link" id="verificationLink">
             GitHub에서 인증하기 →
@@ -846,6 +1013,7 @@
           <div class="device-code-status">
             <div class="device-code-spinner"></div>
             <span>인증 대기 중...</span>
+            <span class="device-countdown" id="deviceCountdown"></span>
           </div>
         </div>
       </div>
@@ -865,7 +1033,7 @@
           <select class="repo-select" id="repoSelect">
             <option value="">저장소를 선택하세요...</option>
           </select>
-          <button class="create-repo-btn" id="createRepoBtn">+ 새 저장소 만들기 (python-codekata)</button>
+          <button class="create-repo-btn" id="createRepoBtn">+ 새 저장소 만들기 (python-algorithm)</button>
         </div>
       </div>
     </div>
@@ -888,7 +1056,7 @@
       <div class="complete-card">
         <div class="complete-icon">🎉</div>
         <div class="complete-title">모든 문제 완료!</div>
-        <div class="complete-desc">431개 문제를 모두 해결했습니다</div>
+        <div class="complete-desc" id="completeDesc">393개 문제를 모두 해결했습니다</div>
       </div>
     </div>
 
@@ -906,10 +1074,6 @@
         <div class="progress-value" id="progCount">0</div>
         <div class="progress-label">프로그래머스</div>
       </div>
-      <div class="progress-card">
-        <div class="progress-value" id="baekCount">0</div>
-        <div class="progress-label">백준</div>
-      </div>
     </div>
 
     <!-- 플랫폼 탭 -->
@@ -921,10 +1085,6 @@
       <button class="tab-btn" data-tab="programmers">
         <span>프로그래머스</span>
         <span class="tab-count" id="progTabCount">0/170</span>
-      </button>
-      <button class="tab-btn" data-tab="baekjoon">
-        <span>백준</span>
-        <span class="tab-count" id="baekTabCount">0/38</span>
       </button>
       <button class="tab-btn" data-tab="settings">
         <span>설정</span>
@@ -975,11 +1135,6 @@
       <div id="progDifficultyList"></div>
     </div>
 
-    <!-- 백준 탭 -->
-    <div class="tab-content" id="tab-baekjoon">
-      <div id="baekDifficultyList"></div>
-    </div>
-
     <!-- 설정 탭 -->
     <div class="tab-content" id="tab-settings">
       <!-- GitHub 계정 -->
@@ -1010,7 +1165,7 @@
             <select class="repo-select" id="settingsRepoSelect">
               <option value="">저장소를 선택하세요...</option>
             </select>
-            <button class="create-repo-btn" id="settingsCreateRepoBtn">+ 새 저장소 만들기 (python-codekata)</button>
+            <button class="create-repo-btn" id="settingsCreateRepoBtn">+ 새 저장소 만들기 (python-algorithm)</button>
           </div>
         </div>
       </div>
@@ -1033,7 +1188,7 @@
       <!-- 초기화 -->
       <div class="section">
         <div class="section-title">진행 상황 초기화</div>
-        <p style="font-size: 11px; color: #64748b; margin-bottom: 10px;">모든 풀이 기록을 삭제합니다. 이 작업은 되돌릴 수 없습니다.</p>
+        <p style="font-size: 11px; color: var(--text-mute); margin-bottom: 10px;">모든 풀이 기록을 삭제합니다. 이 작업은 되돌릴 수 없습니다.</p>
         <button class="setting-btn" id="resetBtn" style="background: linear-gradient(135deg, #ef4444, #dc2626);">
           🗑️ 모든 진행 상황 초기화
         </button>
@@ -1041,7 +1196,12 @@
     </div>
   </div>
 
-  <div class="footer">Made with ♥ by SeolMuah</div>
+  <div class="footer">
+    <div class="footer-line">Made with ♥ by SeolMuah</div>
+    <div class="footer-line">
+      문의 <a class="footer-link" href="mailto:seolmuah@gmail.com" target="_blank" rel="noopener">seolmuah@gmail.com</a>
+    </div>
+  </div>
 
   <script src="problems.js"></script>
   <script src="popup.js"></script>

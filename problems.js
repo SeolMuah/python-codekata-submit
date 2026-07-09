@@ -1,5 +1,5 @@
-// Python 코드카타 문제 목록 (총 431개)
-// difficulty: 0 (L0 기초·입문), 1-5 (L1~L5), 7 (레벨7 챌린지), 8 (레벨8 백준)
+// Python 알고리즘 문제 목록 (총 393개, 전부 프로그래머스)
+// difficulty: 0 (L0 기초·입문), 1-5 (L1~L5), 7 (레벨7 챌린지)
 const PROBLEMS = [
   // ========== 기초·입문 L0 (1-223) ==========
 
@@ -413,47 +413,6 @@ const PROBLEMS = [
   { id: 391, difficulty: 7, title: "고고학 최고의 발견", platform: "programmers", problemId: "131702", algorithm: "완전탐색" },
   { id: 392, difficulty: 7, title: "아방가르드 타일링", platform: "programmers", problemId: "181186", algorithm: "DP" },
   { id: 393, difficulty: 7, title: "에어컨", platform: "programmers", problemId: "214289", algorithm: "DP" },
-
-  // ========== 백준 L8 (394-431) ==========
-
-  { id: 394, difficulty: 8, title: "Fly me to the Alpha Centauri", platform: "baekjoon", problemId: "1011", algorithm: "수학" },
-  { id: 395, difficulty: 8, title: "터렛", platform: "baekjoon", problemId: "1002", algorithm: "수학" },
-  { id: 396, difficulty: 8, title: "괄호", platform: "baekjoon", problemId: "9012", algorithm: "스택" },
-  { id: 397, difficulty: 8, title: "균형잡힌 세상", platform: "baekjoon", problemId: "4949", algorithm: "스택" },
-  { id: 398, difficulty: 8, title: "스택 수열", platform: "baekjoon", problemId: "1874", algorithm: "스택" },
-  { id: 399, difficulty: 8, title: "회전하는 큐", platform: "baekjoon", problemId: "1021", algorithm: "큐, 덱" },
-  { id: 400, difficulty: 8, title: "요세푸스 문제 0", platform: "baekjoon", problemId: "11866", algorithm: "큐" },
-  { id: 401, difficulty: 8, title: "최대 힙", platform: "baekjoon", problemId: "11279", algorithm: "힙" },
-  { id: 402, difficulty: 8, title: "최소 힙", platform: "baekjoon", problemId: "1927", algorithm: "힙" },
-  { id: 403, difficulty: 8, title: "영화감독 숌", platform: "baekjoon", problemId: "1436", algorithm: "완전탐색" },
-  { id: 404, difficulty: 8, title: "다리 놓기", platform: "baekjoon", problemId: "1010", algorithm: "DP, 조합" },
-  { id: 405, difficulty: 8, title: "블랙잭", platform: "baekjoon", problemId: "2798", algorithm: "완전탐색" },
-  { id: 406, difficulty: 8, title: "분해합", platform: "baekjoon", problemId: "2231", algorithm: "완전탐색" },
-  { id: 407, difficulty: 8, title: "잃어버린 괄호", platform: "baekjoon", problemId: "1541", algorithm: "그리디" },
-  { id: 408, difficulty: 8, title: "동전 0", platform: "baekjoon", problemId: "11047", algorithm: "그리디" },
-  { id: 409, difficulty: 8, title: "ATM", platform: "baekjoon", problemId: "11399", algorithm: "그리디, 정렬" },
-  { id: 410, difficulty: 8, title: "계단 오르기", platform: "baekjoon", problemId: "2579", algorithm: "DP" },
-  { id: 411, difficulty: 8, title: "신나는 함수 실행", platform: "baekjoon", problemId: "9184", algorithm: "DP, 재귀" },
-  { id: 412, difficulty: 8, title: "파도반 수열", platform: "baekjoon", problemId: "9461", algorithm: "DP" },
-  { id: 413, difficulty: 8, title: "RGB거리", platform: "baekjoon", problemId: "1149", algorithm: "DP" },
-  { id: 414, difficulty: 8, title: "정수 삼각형", platform: "baekjoon", problemId: "1932", algorithm: "DP" },
-  { id: 415, difficulty: 8, title: "가장 긴 증가하는 부분 수열", platform: "baekjoon", problemId: "11053", algorithm: "DP" },
-  { id: 416, difficulty: 8, title: "평범한 배낭", platform: "baekjoon", problemId: "12865", algorithm: "DP (배낭문제)" },
-  { id: 417, difficulty: 8, title: "하노이 탑 이동 순서", platform: "baekjoon", problemId: "11729", algorithm: "재귀" },
-  { id: 418, difficulty: 8, title: "좌표 정렬하기 2", platform: "baekjoon", problemId: "11651", algorithm: "정렬" },
-  { id: 419, difficulty: 8, title: "나무 자르기", platform: "baekjoon", problemId: "2805", algorithm: "이진탐색" },
-  { id: 420, difficulty: 8, title: "통계학", platform: "baekjoon", problemId: "2108", algorithm: "정렬, 수학" },
-  { id: 421, difficulty: 8, title: "공유기 설치", platform: "baekjoon", problemId: "2110", algorithm: "이진탐색" },
-  { id: 422, difficulty: 8, title: "K번째 수", platform: "baekjoon", problemId: "1300", algorithm: "이진탐색" },
-  { id: 423, difficulty: 8, title: "가장 긴 증가하는 부분 수열 2", platform: "baekjoon", problemId: "12015", algorithm: "이진탐색, DP" },
-  { id: 424, difficulty: 8, title: "DFS와 BFS", platform: "baekjoon", problemId: "1260", algorithm: "DFS/BFS" },
-  { id: 425, difficulty: 8, title: "색종이 만들기", platform: "baekjoon", problemId: "2630", algorithm: "분할정복" },
-  { id: 426, difficulty: 8, title: "N과 M (2)", platform: "baekjoon", problemId: "15650", algorithm: "백트래킹" },
-  { id: 427, difficulty: 8, title: "N-Queen", platform: "baekjoon", problemId: "9663", algorithm: "백트래킹" },
-  { id: 428, difficulty: 8, title: "바이러스", platform: "baekjoon", problemId: "2606", algorithm: "DFS/BFS" },
-  { id: 429, difficulty: 8, title: "단지번호붙이기", platform: "baekjoon", problemId: "2667", algorithm: "DFS/BFS" },
-  { id: 430, difficulty: 8, title: "토마토", platform: "baekjoon", problemId: "7576", algorithm: "BFS" },
-  { id: 431, difficulty: 8, title: "유기농 배추", platform: "baekjoon", problemId: "1012", algorithm: "DFS/BFS" },
 ];
 
 // 난이도 정보
@@ -464,35 +423,55 @@ const DIFFICULTY_INFO = {
   3: { name: "L3", display: "⭐⭐⭐", label: "중급", folder: "L3_중급" },
   4: { name: "L4", display: "⭐⭐⭐⭐", label: "중상", folder: "L4_중상" },
   5: { name: "L5", display: "⭐⭐⭐⭐⭐", label: "고급", folder: "L5_고급" },
-  7: { name: "레벨7", display: "🔥", label: "챌린지", folder: "L7_챌린지" },
-  8: { name: "레벨8", display: "💎", label: "백준", folder: "L8_백준" }
+  7: { name: "레벨7", display: "🔥", label: "챌린지", folder: "L7_챌린지" }
 };
 
-// 문제 URL 생성
+// 전체 문제 수 (하드코딩 금지 — 런타임 계산)
+const TOTAL_PROBLEMS = PROBLEMS.length;
+
+// 카테고리별 문제 수 (런타임 계산)
+const PROBLEM_COUNTS = {
+  total: TOTAL_PROBLEMS,                                                       // 393
+  main: PROBLEMS.filter(p => p.difficulty >= 1).length,                       // difficulty >= 1
+  beginner: PROBLEMS.filter(p => p.difficulty === 0).length,                  // difficulty === 0
+  intro: PROBLEMS.filter(p => p.category === '코딩테스트입문').length,        // 코딩테스트입문
+  training: PROBLEMS.filter(p => p.category === '코딩기초트레이닝').length    // 코딩기초트레이닝
+};
+
+// O(1) 조회용 인덱스 (모듈 로드 시 1회 생성)
+const _PROBLEM_BY_ID = new Map();
+const _PROBLEM_BY_PROBLEM_ID = new Map();
+for (const _p of PROBLEMS) {
+  // id는 number|string 모두 허용하도록 문자열 키로 통일
+  _PROBLEM_BY_ID.set(String(_p.id), _p);
+  _PROBLEM_BY_PROBLEM_ID.set(_p.problemId, _p);
+}
+
+// 문제 URL 생성 (프로그래머스 전용)
 function getProblemUrl(problem) {
-  if (problem.platform === 'programmers') {
-    return `https://school.programmers.co.kr/learn/courses/30/lessons/${problem.problemId}`;
-  } else {
-    return `https://www.acmicpc.net/problem/${problem.problemId}`;
-  }
+  return `https://school.programmers.co.kr/learn/courses/30/lessons/${problem.problemId}`;
 }
 
-// problemId와 platform으로 문제 정보 찾기
-function getProblemByProblemId(problemId, platform) {
-  return PROBLEMS.find(p => p.problemId === problemId && p.platform === platform);
+// id로 문제 정보 찾기 (Map 기반 O(1), id는 number|string 모두 허용)
+function getProblemById(id) {
+  return _PROBLEM_BY_ID.get(String(id));
 }
 
-// GitHub 저장 경로 생성
+// problemId로 문제 정보 찾기 (Map 기반 O(1))
+function getProblemByProblemId(problemId) {
+  return _PROBLEM_BY_PROBLEM_ID.get(problemId);
+}
+
+// GitHub 저장 경로 생성 (프로그래머스 전용, 경로 문자열은 기존과 동일 유지)
 function getGitHubPath(problem) {
   const diffInfo = DIFFICULTY_INFO[problem.difficulty];
-  const platformFolder = problem.platform === "programmers" ? "programmers" : "baekjoon";
   const fileName = `${String(problem.id).padStart(3, '0')}_${problem.title.replace(/[^가-힣a-zA-Z0-9]/g, '_')}.py`;
 
   // L0 (기초·입문) 문제는 카테고리별 하위 폴더 사용
   if (problem.difficulty === 0 && problem.category) {
     const subFolder = problem.category === '코딩테스트입문' ? '입문' : '기초트레이닝';
-    return `${platformFolder}/${diffInfo.folder}/${subFolder}/${fileName}`;
+    return `programmers/${diffInfo.folder}/${subFolder}/${fileName}`;
   }
 
-  return `${platformFolder}/${diffInfo.folder}/${fileName}`;
+  return `programmers/${diffInfo.folder}/${fileName}`;
 }

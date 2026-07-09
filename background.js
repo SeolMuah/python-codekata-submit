@@ -1,4 +1,4 @@
-// Python 코드카타 Background Service Worker
+// Python 알고리즘 Background Service Worker
 // GitHub OAuth 인증 및 API 호출 처리
 
 // Service Worker에서 외부 스크립트 import
@@ -8,6 +8,14 @@ importScripts('problems.js', 'github-api.js', 'oauth.js');
 self.addEventListener('unhandledrejection', (event) => {
   console.error('[Background] Unhandled Promise Rejection:', event.reason);
 });
+
+// 툴바 아이콘을 누르면 팝업 대신 오른쪽 사이드 패널이 열리도록 한다.
+// (manifest 에 action.default_popup 이 없어야 이 동작이 적용된다)
+if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error) => console.error('[Background] 사이드 패널 설정 실패:', error));
+}
 
 // 메시지 리스너
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -21,26 +29,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .catch(error => sendResponse({ success: false, message: error.message }));
       return true;
 
-    case 'POLL_FOR_TOKEN':
-      handlePollForToken(message.data)
-        .then(result => sendResponse(result))
-        .catch(error => sendResponse({ success: false, message: error.message }));
+    // 백그라운드 폴링 시작 (알람 기반이라 서비스 워커가 죽어도 이어진다)
+    case 'START_POLLING_BACKGROUND':
+      sendResponse({ success: true, message: '폴링 시작됨' });
+      startDeviceAuthPolling();
       return true;
 
-    // 백그라운드 폴링 (팝업과 독립적으로 실행)
-    case 'START_POLLING_BACKGROUND':
-      // 즉시 응답 반환 - 팝업이 닫혀도 백그라운드는 계속 진행
-      sendResponse({ success: true, message: '폴링 시작됨' });
+    // GitHub 인증 성공 화면에 도달했다 → 30초 알람을 기다리지 않고 즉시 확인
+    case 'DEVICE_AUTH_COMPLETED':
+      sendResponse({ success: true });
+      pollDeviceAuthOnce('github-success-page');
+      return true;
 
-      // 백그라운드에서 독립적으로 폴링 진행
-      handlePollForToken(message.data)
-        .then(() => {
-          console.log('[Background] 토큰 성공적으로 획득 및 저장됨');
-          // 토큰은 handlePollForToken에서 자동으로 저장됨
-        })
-        .catch(error => {
-          console.error('[Background] 백그라운드 폴링 실패:', error.message);
-        });
+    // 팝업/사이드패널이 열릴 때 진행 중인 인증을 즉시 확인 + 폴링 되살리기
+    case 'POLL_DEVICE_AUTH_NOW':
+      sendResponse({ success: true });
+      resumeDeviceAuthIfPending();
       return true;
 
     case 'GET_USER_INFO':
@@ -119,6 +123,18 @@ async function handleStartDeviceFlow() {
     throw new Error('GitHub Client ID가 설정되지 않았습니다. oauth.js에서 GITHUB_CLIENT_ID를 설정해주세요.');
   }
   const deviceData = await requestDeviceCode();
+
+  // 진행 중 device flow 상태 저장 (content-github-device.js가 코드 자동 입력에 사용)
+  await chrome.storage.local.set({
+    pendingDeviceAuth: {
+      user_code: deviceData.user_code,
+      device_code: deviceData.device_code,
+      verification_uri: deviceData.verification_uri,
+      expires_at: Date.now() + deviceData.expires_in * 1000,
+      interval: deviceData.interval
+    }
+  });
+
   return {
     success: true,
     device_code: deviceData.device_code,
@@ -129,33 +145,157 @@ async function handleStartDeviceFlow() {
   };
 }
 
-// 토큰 폴링
-async function handlePollForToken(data) {
-  const { device_code, interval, expires_in } = data;
-  const result = await pollForToken(device_code, interval, expires_in);
+// ========== Device Flow 토큰 폴링 (chrome.alarms 기반) ==========
+//
+// ⚠️ MV3 서비스 워커는 유휴 30초쯤에 종료된다.
+// 예전처럼 while + sleep 루프로 폴링하면, 사용자가 GitHub에서 Authorize 를 누르기 전에
+// 워커가 죽어버려 "인증은 했는데 익스텐션이 계속 대기 중" 상태가 된다.
+// (빨리 누르면 되고 늦게 누르면 안 되는, 재현이 들쭉날쭉한 그 증상)
+//
+// 그래서 상태는 chrome.storage.local 의 pendingDeviceAuth 에만 두고,
+// 반복은 워커를 되살려주는 chrome.alarms 가 돌린다.
+// 추가로 GitHub 인증 성공 화면에 도달하면 content script 가 즉시 1회 폴링을 요청해
+// 30초를 기다리지 않고 곧바로 로그인이 완료되게 한다.
 
-  if (result.success) {
-    // 사용자 정보 먼저 가져오기 (race condition 방지)
-    const userInfo = await getUserInfo(result.access_token);
+const DEVICE_POLL_ALARM = 'pyalgo-device-poll';
+const DEVICE_POLL_PERIOD_MIN = 0.5; // chrome.alarms 최소 주기 = 30초
 
-    // 토큰과 사용자 정보 함께 저장 (원자적 업데이트)
-    await chrome.storage.local.set({
-      githubToken: result.access_token,
-      githubUser: userInfo
-    });
+let devicePollInFlight = false;
 
-    console.log('[Background] 토큰 및 사용자 정보 저장 완료');
+async function startDeviceAuthPolling() {
+  await chrome.alarms.create(DEVICE_POLL_ALARM, {
+    periodInMinutes: DEVICE_POLL_PERIOD_MIN,
+    delayInMinutes: DEVICE_POLL_PERIOD_MIN
+  });
+  // 알람을 기다리지 않고 즉시 1회 시도 (이미 인증을 마쳤을 수 있다)
+  await pollDeviceAuthOnce('start');
+}
 
-    // 모든 열린 팝업에 로그인 성공 브로드캐스트
-    broadcastAuthSuccess(userInfo);
+async function stopDeviceAuthPolling() {
+  await chrome.alarms.clear(DEVICE_POLL_ALARM);
+}
 
-    return {
-      success: true,
-      user: userInfo
-    };
+async function completeDeviceAuth(accessToken) {
+  // 사용자 정보를 먼저 가져온 뒤 토큰과 함께 저장 (팝업이 반쪽 상태를 보지 않도록)
+  const userInfo = await getUserInfo(accessToken);
+  await chrome.storage.local.set({ githubToken: accessToken, githubUser: userInfo });
+  await chrome.storage.local.remove(['pendingDeviceAuth']);
+  await stopDeviceAuthPolling();
+
+  console.log('[Background] 토큰 및 사용자 정보 저장 완료');
+
+  await ensureRepoAfterLogin(accessToken);
+  broadcastAuthSuccess(userInfo);
+}
+
+async function failDeviceAuth(message) {
+  await chrome.storage.local.remove(['pendingDeviceAuth']);
+  await stopDeviceAuthPolling();
+  console.warn('[Background] Device Flow 실패:', message);
+
+  chrome.runtime.sendMessage({ type: 'AUTH_FAILED', message }).catch(() => {
+    // 열린 팝업이 없으면 무시 (정상)
+  });
+}
+
+async function pollDeviceAuthOnce(reason) {
+  if (devicePollInFlight) {
+    return;
   }
+  devicePollInFlight = true;
 
-  throw new Error('토큰 발급 실패');
+  try {
+    const { pendingDeviceAuth } = await chrome.storage.local.get('pendingDeviceAuth');
+
+    if (!pendingDeviceAuth || !pendingDeviceAuth.device_code) {
+      await stopDeviceAuthPolling();
+      return;
+    }
+
+    // 이미 로그인이 끝났으면 정리만 한다 (중복 폴링 방지)
+    const { githubToken } = await chrome.storage.local.get('githubToken');
+    if (githubToken) {
+      await chrome.storage.local.remove(['pendingDeviceAuth']);
+      await stopDeviceAuthPolling();
+      return;
+    }
+
+    if (typeof pendingDeviceAuth.expires_at === 'number' && Date.now() > pendingDeviceAuth.expires_at) {
+      await failDeviceAuth('인증 시간이 만료되었습니다. 다시 시도해주세요.');
+      return;
+    }
+
+    console.log('[Background] Device Flow 폴링 (' + reason + ')');
+    const result = await requestTokenOnce(pendingDeviceAuth.device_code);
+
+    switch (result.status) {
+      case 'success':
+        await completeDeviceAuth(result.access_token);
+        break;
+      case 'pending':
+      case 'slow_down':
+      case 'network':
+        // 계속 기다린다. 다음 알람에서 재시도.
+        break;
+      case 'expired':
+        await failDeviceAuth('인증 시간이 만료되었습니다. 다시 시도해주세요.');
+        break;
+      case 'denied':
+        await failDeviceAuth('GitHub 권한 요청이 거부되었습니다.');
+        break;
+      default:
+        await failDeviceAuth(result.message || '인증에 실패했습니다.');
+    }
+  } catch (error) {
+    // 예기치 못한 오류로 pendingDeviceAuth 를 지워버리면 사용자가 다시 로그인해야 한다.
+    // 알람이 살아 있으므로 다음 주기에 재시도한다.
+    console.error('[Background] Device Flow 폴링 오류:', error.message);
+  } finally {
+    devicePollInFlight = false;
+  }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === DEVICE_POLL_ALARM) {
+    pollDeviceAuthOnce('alarm');
+  }
+});
+
+// 워커가 죽었다 살아나도 진행 중이던 인증을 이어간다
+async function resumeDeviceAuthIfPending() {
+  const { pendingDeviceAuth } = await chrome.storage.local.get('pendingDeviceAuth');
+  if (!pendingDeviceAuth) return;
+
+  if (typeof pendingDeviceAuth.expires_at === 'number' && Date.now() > pendingDeviceAuth.expires_at) {
+    await failDeviceAuth('인증 시간이 만료되었습니다. 다시 시도해주세요.');
+    return;
+  }
+  console.log('[Background] 진행 중이던 Device Flow 폴링 재개');
+  await startDeviceAuthPolling();
+}
+
+chrome.runtime.onStartup.addListener(() => { resumeDeviceAuthIfPending(); });
+
+// 로그인 직후 저장소 자동 설정
+// githubRepo가 비어 있고 사용자 저장소 중 이름이 정확히 'python-algorithm'인 것이 있으면 자동 선택.
+// 없으면 아무것도 자동 생성하지 않는다 (사용자 동의 없는 저장소 생성 금지).
+async function ensureRepoAfterLogin(token) {
+  try {
+    const { githubRepo } = await chrome.storage.sync.get(['githubRepo']);
+    if (githubRepo) {
+      return; // 이미 저장소가 선택되어 있음
+    }
+
+    const repos = await getUserRepos(token);
+    const match = repos.find(repo => repo.name === 'python-algorithm');
+    if (match) {
+      await chrome.storage.sync.set({ githubRepo: match.full_name });
+      console.log('[Background] 저장소 자동 선택:', match.full_name);
+    }
+  } catch (error) {
+    // 저장소 자동 설정 실패는 로그인 자체를 막지 않는다
+    console.error('[Background] 저장소 자동 설정 실패:', error.message);
+  }
 }
 
 // 인증 성공 브로드캐스트 - 열린 팝업에 알림
@@ -209,7 +349,7 @@ async function handleCreateRepo(data) {
     return { success: false, message: '로그인이 필요합니다' };
   }
 
-  const repoName = data?.repoName || 'python-codekata';
+  const repoName = data?.repoName || 'python-algorithm';
   const repo = await createRepo(githubToken, repoName);
 
   // 생성된 저장소 자동 선택
@@ -232,6 +372,7 @@ async function handleSelectRepo(data) {
 
 // 로그아웃
 async function handleLogout() {
+  await stopDeviceAuthPolling();
   await logout();
   return { success: true, message: '로그아웃되었습니다' };
 }
@@ -271,10 +412,10 @@ async function handleCheckAuth() {
 
 // GitHub Push 처리
 async function handlePushToGitHub(data) {
-  const { problemId, platform, code } = data;
+  const { problemId, code } = data;
 
   // 문제 정보 조회
-  const problem = getProblemByProblemId(problemId, platform);
+  const problem = getProblemByProblemId(problemId);
   if (!problem) {
     return { success: false, message: '문제 정보를 찾을 수 없습니다' };
   }
@@ -329,7 +470,7 @@ async function handlePushToGitHub(data) {
 
 // 동적 문제 (미등록 문제) GitHub Push 처리
 async function handlePushDynamicProblem(data) {
-  const { problemId, title, platform, difficulty, code } = data;
+  const { problemId, title, difficulty, code } = data;
 
   // OAuth 토큰 및 설정 불러오기
   const { githubToken } = await chrome.storage.local.get(['githubToken']);
@@ -347,15 +488,20 @@ async function handlePushDynamicProblem(data) {
     // GitHub API 인스턴스 생성 (OAuth 토큰 사용)
     const api = createGitHubAPI(githubToken, githubRepo);
 
-    // 플랫폼별 폴더 경로 설정 (영문 폴더명 사용)
-    const platformFolder = platform === 'programmers' ? 'programmers' : 'baekjoon';
-    const platformLabel = platform === 'programmers' ? '프로그래머스' : '백준';
+    // 폴더 경로 설정 (프로그래머스 전용, 영문 폴더명 사용)
+    const platformFolder = 'programmers';
+    const platformLabel = '프로그래머스';
 
-    // 파일명 생성 (특수문자 제거)
-    const safeTitle = title.replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, '_').substring(0, 50);
+    // 파일명 생성 (파일시스템 + URL 위험 문자 제거)
+    const safeTitle = title
+      .replace(/[<>:"/\\|?*#%]/g, '')
+      .replace(/[\x00-\x1f]/g, '')
+      .replace(/\s+/g, '_')
+      .replace(/^[._]+|[._]+$/g, '')
+      .substring(0, 50) || `문제_${problemId}`;
     const fileName = `${problemId}_${safeTitle}.py`;
 
-    // 경로: programmers/other/문제.py 또는 baekjoon/other/문제.py
+    // 경로: programmers/other/문제.py
     const filePath = `${platformFolder}/other/${fileName}`;
 
     // 날짜와 시간 포맷 (한국 시간) - 기존 문제와 동일한 형식
@@ -370,10 +516,8 @@ async function handlePushDynamicProblem(data) {
       hour12: false
     });
 
-    // 문제 URL 생성
-    const problemUrl = platform === 'programmers'
-      ? `https://school.programmers.co.kr/learn/courses/30/lessons/${problemId}`
-      : `https://www.acmicpc.net/problem/${problemId}`;
+    // 문제 URL 생성 (프로그래머스 전용)
+    const problemUrl = `https://school.programmers.co.kr/learn/courses/30/lessons/${problemId}`;
 
     // 커밋 메시지 생성
     const commitMessage = `[${platformLabel}] ${title} 풀이 제출\n\n- 문제 ID: ${problemId}\n- 난이도: ${difficulty || 'unknown'}\n- 제출일: ${dateTime}\n- 작성자: ${studentName || '학생'}`;
@@ -487,6 +631,13 @@ chrome.runtime.onInstalled.addListener((details) => {
       studentName: ''
     });
   }
+
+  // 업데이트/재로드로 워커가 새로 떴을 때 진행 중이던 인증을 이어간다
+  resumeDeviceAuthIfPending();
 });
+
+// 워커가 종료됐다가 어떤 이벤트로든 되살아났을 때도 인증을 이어간다.
+// (onStartup 은 브라우저 시작 때만 불린다)
+resumeDeviceAuthIfPending();
 
 console.log('[Background] Service Worker 시작됨');
